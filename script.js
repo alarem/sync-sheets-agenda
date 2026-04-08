@@ -9,121 +9,110 @@ function importBusinessEvents() {
     sheet = ss.insertSheet("RDV");
   }
 
-  // 🔹 3. Vider la feuille (pour repartir propre)
+  // 🔹 3. Vider la feuille (⚠️ supprime tout → OK ici car on reconstruit)
   sheet.clearContents();
 
   // 🔹 4. Ajouter les en-têtes
-sheet.appendRow([
-  "Métier",
-  "Client/Lieu",
-  "Prestation",
-  "Date",
-  "Mois",
-  "Heure",
-  "Montant",
-  "Payé"
-]);
+  sheet.appendRow([
+    "Métier",
+    "Client/Lieu",
+    "Prestation",
+    "Date",
+    "Mois",
+    "Heure",
+    "Montant",
+    "Payé"
+  ]);
 
-  // 🔹 5. Choisir l'agenda (ici agenda principal)
-  const calendar = CalendarApp.getCalendarsByName("Agenda de nous ! ")[0]; //const calendar = CalendarApp.getDefaultCalendar();
+  // 🔹 5. Récupérer l'agenda (⚠️ vérifier le nom exact)
+  const calendars = CalendarApp.getCalendarsByName("Agenda de nous ! ");
+  if (calendars.length === 0) {
+    Logger.log("⚠️ Agenda non trouvé !");
+    return;
+  }
+  const calendar = calendars[0];
 
-  // 🔹 6. Définir la période (modifiable)
-  const startDate = new Date("2025-01-01"); // début large
-  const endDate = new Date("2030-01-01");   // fin large
+  // 🔹 6. Définir la période
+  const startDate = new Date("2025-01-01");
+  const endDate = new Date("2030-01-01");
 
   // 🔹 7. Récupérer tous les événements
   const events = calendar.getEvents(startDate, endDate);
-
-  // 🔹 DEBUG : nombre d'événements trouvés
   Logger.log("Nombre d'événements : " + events.length);
 
-  // 🔹 8. Parcourir chaque événement
+  // 🔹 8. Tableau pour stocker les lignes (🚀 optimisation)
+  const rows = [];
+
+  // 🔹 9. Définition des métiers (hors boucle = plus performant)
+  const metiers = {
+    "Hypno": ["hypno", "hypnose", "séance"],
+    "Visite": ["visite", "guide", "getyourguide", "ot", "tbl", "tour"],
+    "Pole": ["pole", "stage"]
+  };
+
+  // 🔹 10. Parcourir les événements
   events.forEach(event => {
 
-    const title = event.getTitle();           // ex: HYPNO Dupont - Séance
-    const description = event.getDescription();
+    const title = event.getTitle();
+    const description = event.getDescription() || ""; // ⚠️ éviter null
     const start = event.getStartTime();
 
-    // 🔸 9. Filtrer uniquement les événements pro
     const originalTitle = title.trim();
     const lowerTitle = originalTitle.toLowerCase().replace(/\u00A0/g, " ").trim();
 
-    // 🔴 EXCLUSION
-    if (lowerTitle.includes("pole art italy")) {
-      return;
-    }
+    // 🔴 EXCLUSION spécifique
+    if (lowerTitle.includes("pole art italy")) return;
 
     let metier = "";
 
-    const metiers = {
-      "Hypno": ["hypno", "hypnose", "séance"],
-      "Visite": ["visite", "guide", "getyourguide","ot", "tbl", "tour"],
-      "Pole": ["pole", "stage"]
-    };
+    // 🔹 Détection métier
+    for (let key in metiers) {
 
-for (let key in metiers) {
+      // 🔸 WT / AWT détecté partout
+      if (key === "Visite") {
+        if (/\b(a?wt)\b/i.test(lowerTitle)) {
+          metier = "Visite";
+          break;
+        }
+      }
 
-  // 🔸 WT / AWT partout
-  if (key === "Visite") {
-    if (/\b(a?wt)\b/i.test(lowerTitle)) {
-      metier = "Visite";
-      break;
+      // 🔸 Détection classique au début
+      if (metiers[key].some(keyword => lowerTitle.startsWith(keyword))) {
+        metier = key;
+        break;
+      }
     }
-  }
 
-  // 🔸 cas classique
-  if (metiers[key].some(keyword => lowerTitle.startsWith(keyword))) {
-    metier = key;
-    break;
-  }
-}
+    // 🔴 Ignorer si non pro
+    if (!metier) return;
 
-    if (!metier) return;   
-
-    // 🔸 10. Nettoyer le titre (enlever [HYPNO] etc.)
+    // 🔹 Nettoyage du titre
     let cleanTitle = originalTitle;
 
     for (let key in metiers) {
       const keyword = metiers[key].find(k => lowerTitle.startsWith(k.toLowerCase()));
-      
       if (keyword) {
         cleanTitle = originalTitle.substring(keyword.length).trim();
         break;
       }
     }
-    // 🔥 SUPPRIMER LES HEURES (AJOUT IMPORTANT)
+
+    // 🔥 Supprimer les heures du titre
     cleanTitle = cleanTitle.replace(/\b\d{1,2}[hH:]?\d{0,2}\b/g, "");
-    // nettoyer les espaces
     cleanTitle = cleanTitle.replace(/\s+/g, " ").trim();
 
-    // 🔸 11. Séparer client et prestation
+    // 🔹 Séparer client / prestation
     const parts = cleanTitle.split(" - ");
     const client = parts[0] || "";
     const prestation = parts[1] || "";
 
-    // 🔸 12. Formater date et heure
-    const date = Utilities.formatDate(
-      start,
-      Session.getScriptTimeZone(),
-      "yyyy-MM-dd"
-    );
+    // 🔹 Format date
+    const date = Utilities.formatDate(start, Session.getScriptTimeZone(), "yyyy-MM-dd");
+    const time = Utilities.formatDate(start, Session.getScriptTimeZone(), "HH:mm");
+    const mois = Utilities.formatDate(start, Session.getScriptTimeZone(), "yyyy-MM");
 
-    const time = Utilities.formatDate(
-      start,
-      Session.getScriptTimeZone(),
-      "HH:mm"
-    );
-
-    const mois = Utilities.formatDate(
-      start,
-      Session.getScriptTimeZone(),
-      "yyyy-MM"
-    );
-
-    // 🔸 13. Extraire le montant depuis la description
+    // 🔹 Extraction montant
     let montant = 0;
-
-    // 🔹 détecter € OU "euros"
     const matches = description.match(/(\d+(?:[.,]\d+)?)\s*(€|euros?|eur)/gi);
 
     if (matches) {
@@ -135,15 +124,15 @@ for (let key in metiers) {
       });
     }
 
-    // 🔸 14. Extraire le statut payé
+    // 🔹 Statut payé
     let paye = "Non";
     const payeMatch = description.match(/Payé:\s*(Oui|Non)/i);
     if (payeMatch) {
       paye = payeMatch[1];
     }
 
-    // 🔹 15. Ajouter la ligne dans Google Sheets
-    sheet.appendRow([
+    // 🔹 Ajouter au tableau (🚀 plus rapide que appendRow)
+    rows.push([
       metier,
       client,
       prestation,
@@ -153,92 +142,16 @@ for (let key in metiers) {
       montant,
       paye
     ]);
-
   });
+
+  // 🔹 11. Écriture en une seule fois (🚀 GROS gain de performance)
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+  }
 
   Logger.log("Import terminé !");
 
-  const now = Utilities.formatDate(
-  new Date(),
-  Session.getScriptTimeZone(),
-  "dd/MM/yyyy HH:mm"
-);
-
-sheet.getRange("J1").setValue("Dernière mise à jour : " + now);
+  // 🔹 12. Date de mise à jour
+  const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
+  sheet.getRange("J1").setValue("Dernière mise à jour : " + now);
 }
-
-function onOpen() {
-  const ui = SpreadsheetApp.getUi();
-  ui.createMenu("🔄 Sync")
-    .addItem("Actualiser les RDV", "importBusinessEvents")
-    .addToUi();
-}
-
-function boutonMobile() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
-  const value = sheet.getRange("J4").getValue();
-
-  if (value === true) {
-    importBusinessEvents(); // ton script principal
-    sheet.getRange("J4").setValue(false); // reset
-  }
-  //sheet.getRange("K4").setValue("Actualiser");
-}
-
-function doGet() {
-  importBusinessEvents();
-
-  return HtmlService.createHtmlOutput(`
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-          body {
-            font-family: Arial;
-            text-align: center;
-            padding: 40px;
-          }
-          button {
-            padding: 15px;
-            font-size: 16px;
-            margin: 10px;
-            border-radius: 8px;
-            border: none;
-            background: #4CAF50;
-            color: white;
-          }
-          a {
-            display: inline-block;
-            margin-top: 15px;
-            font-size: 16px;
-          }
-        </style>
-      </head>
-      <body>
-
-        <h2>📱 Gestion RDV</h2>
-
-        <p>✅ Mise à jour effectuée</p>
-
-        <button onclick="window.location.reload()">
-          🔄 Actualiser
-        </button>
-
-        <br>
-
-        <a href="TON_LIEN_SHEET" target="_blank">
-          📊 Voir le tableau
-        </a>
-
-      </body>
-    </html>
-  `);
-}
-
-function runSync() {
-  importBusinessEvents();
-  return ContentService.createTextOutput("OK");
-}
-
-
-
