@@ -61,16 +61,6 @@ sheet.appendRow([
       "Pole": ["pole", "stage"]
     };
 
-
-/*
-    for (let key in metiers) {
-      if (metiers[key].some(keyword => lowerTitle.startsWith(keyword))) {
-        metier = key;
-        break;
-      }
-    }
-*/
-
 for (let key in metiers) {
 
   // 🔸 WT / AWT partout
@@ -175,13 +165,6 @@ for (let key in metiers) {
 );
 
 sheet.getRange("J1").setValue("Dernière mise à jour : " + now);
-/*
-try {
-  SpreadsheetApp.getUi().alert("Mise à jour terminée ✅");
-} catch (e) {
-  Logger.log("Script exécuté sans interface (mode distant)");
-}
- */
 }
 
 function onOpen() {
@@ -199,7 +182,7 @@ function boutonMobile() {
     importBusinessEvents(); // ton script principal
     sheet.getRange("J4").setValue(false); // reset
   }
-  sheet.getRange("K4").setValue("Actualiser");
+  //sheet.getRange("K4").setValue("Actualiser");
 }
 
 function doGet() {
@@ -214,33 +197,48 @@ function doGet() {
             font-family: Arial;
             text-align: center;
             padding: 40px;
-            background: #f5f5f5;
           }
-          .box {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          button {
+            padding: 15px;
+            font-size: 16px;
+            margin: 10px;
+            border-radius: 8px;
+            border: none;
+            background: #4CAF50;
+            color: white;
           }
-          h2 {
-            color: green;
+          a {
+            display: inline-block;
+            margin-top: 15px;
+            font-size: 16px;
           }
         </style>
       </head>
       <body>
-        <div class="box">
-          <h2>✅ Mise à jour terminée</h2>
-          <p>Les rendez-vous ont été synchronisés 👍</p>
-          <a href="https://docs.google.com/spreadsheets/d/1DIfRb54znMJvk54nptDzJkA4Qz2Dv6e77PjK9E-YqDY/edit?gid=0#gid=0" target="_blank">
-             📊 Voir le tableau
-          </a>
-        </div>
+
+        <h2>📱 Gestion RDV</h2>
+
+        <p>✅ Mise à jour effectuée</p>
+
+        <button onclick="window.location.reload()">
+          🔄 Actualiser
+        </button>
+
+        <br>
+
+        <a href="TON_LIEN_SHEET" target="_blank">
+          📊 Voir le tableau
+        </a>
+
       </body>
     </html>
   `);
 }
 
-
+function runSync() {
+  importBusinessEvents();
+  return ContentService.createTextOutput("OK");
+}
 
 
 
