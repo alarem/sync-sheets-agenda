@@ -9,6 +9,19 @@ function importBusinessEvents() {
     sheet = ss.insertSheet("RDV");
   }
 
+if (sheet.getLastRow() === 0) {
+  sheet.appendRow([
+    "Métier",
+    "Client/Lieu",
+    "Prestation",
+    "Date",
+    "Mois",
+    "Heure",
+    "Montant",
+    "Payé",
+    "EventID"
+  ]);
+}
 const lastRow = sheet.getLastRow();
 
 let existingIds = [];
@@ -32,7 +45,7 @@ const existingIdsSet = new Set(existingIds);
 
   // 🔹 6. Définir la période (modifiable)
   const startDate = new Date("2026-01-01"); // début large
-  const endDate = new Date("2030-01-01");   // fin large
+  const endDate = new Date("2027-01-01");   // fin large
 
   // 🔹 7. Récupérer tous les événements
   //const events = calendar.getEvents(startDate, endDate);
@@ -174,8 +187,10 @@ for (let key in metiers) {
       paye,
       eventId
     ]);
-    sheet.hideColumns(9);
+
   });
+  
+    sheet.hideColumns(9);
 
   // 🔹 11. Écriture en une seule fois (🚀 GROS gain de performance)
 if (!rows || rows.length === 0) {
@@ -194,8 +209,7 @@ if (!rows || rows.length === 0) {
   "dd/MM/yyyy HH:mm"
 );
 
-sheet.getRange("J1").setValue("Dernière mise à jour : " + now);
-sheet.getRange("J2").setValue("Nombre de RDV : " + rows.length);
+sheet.getRange("K1").setValue("Dernière mise à jour : " + now);
 }
 
 function onOpen() {
@@ -207,18 +221,18 @@ function onOpen() {
 
 function boutonMobile() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
-  const value = sheet.getRange("J4").getValue();
+  const value = sheet.getRange("K4").getValue();
 
   if (value === true) {
     importBusinessEvents(); // ton script principal
-    sheet.getRange("J4").setValue(false); // reset
+    sheet.getRange("K4").setValue(false); // reset
   }
 
 }
 
 function doGet() {
   importBusinessEvents();
-
+/*
   return HtmlService.createHtmlOutput(`
     <html>
       <head>
@@ -264,6 +278,7 @@ function doGet() {
       </body>
     </html>
   `);
+  */
 }
 
 
