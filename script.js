@@ -2,27 +2,29 @@ function importBusinessEvents() {
 
   // 🔹 1. Récupérer le fichier Google Sheets actif
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-
+  
   // 🔹 2. Récupérer la feuille "RDV" (ou la créer si elle n'existe pas)
   let sheet = ss.getSheetByName("RDV");
   if (!sheet) {
     sheet = ss.insertSheet("RDV");
   }
 
-  // 🔹 3. Vider la feuille (pour repartir propre)
-  sheet.clearContents();
+const lastRow = sheet.getLastRow();
 
-  // 🔹 4. Ajouter les en-têtes
-sheet.appendRow([
-  "Métier",
-  "Client/Lieu",
-  "Prestation",
-  "Date",
-  "Mois",
-  "Heure",
-  "Montant",
-  "Payé"
-]);
+let existingIds = [];
+
+if (lastRow > 1) {
+  existingIds = sheet
+    .getRange(2, 9, lastRow - 1, 1)
+    .getValues()
+    .flat()
+    .filter(String); // 🔥 enlève vides
+}
+
+// 🔥 NORMALISATION (très important)
+existingIds = existingIds.map(id => id.toString().trim());
+
+const existingIdsSet = new Set(existingIds);
 
   // 🔹 5. Choisir l'agenda (ici agenda principal)
   //const calendar = CalendarApp.getCalendarsByName("Agenda de nous ! ")[0];
@@ -45,15 +47,17 @@ sheet.appendRow([
   const seenEvents = new Set();
 
   // 🔹 DEBUG : nombre d'événements trouvés
-  Logger.log("Nombre d'événements : " + events.length);
+  console.log("Nombre d'événements : " + events.length);
 
   // 🔹 8. Parcourir chaque événement
   events.forEach(event => {
 
-    // ✅ ÉVITER LES DOUBLONS (à mettre tout en haut)
-    const eventId = event.getId();
+    const eventId = event.getId().toString().trim();
+    // 🔁 éviter doublons dans le script
     if (seenEvents.has(eventId)) return;
     seenEvents.add(eventId);
+    // 🆕 éviter doublons déjà présents dans la feuille
+    if (existingIdsSet.has(eventId)) return;
     
     const title = event.getTitle() || "";           // ex: HYPNO Dupont - Séance
     const description = event.getDescription() || ""; //  || "" évite les crash si déscription vide
@@ -107,7 +111,6 @@ for (let key in metiers) {
       }
     }
     // 🔥 SUPPRIMER LES HEURES (AJOUT IMPORTANT)
-    //cleanTitle = cleanTitle.replace(/\b\d{1,2}[hH:]?\d{0,2}\b/g, "");
     cleanTitle = cleanTitle.replace(/\b\d{1,2}([hH:]\d{2})?\b/g, "");
     // nettoyer les espaces
     cleanTitle = cleanTitle.replace(/\s+/g, " ").trim();
@@ -140,7 +143,8 @@ for (let key in metiers) {
     let montant = 0;
 
     // 🔹 détecter € OU "euros"
-    const matches = description.match(/(\d+(?:[.,]\d+)?)\s*(€|euros?|eur)/gi);
+    //const matches = description.match(/(\d+(?:[.,]\d+)?)\s*(€|euros?|eur)/gi);
+    const matches = description.match(/(\d+[.,]?\d*)\s*(€|eur|euros?)/gi);
 
     if (matches) {
       matches.forEach(m => {
@@ -167,19 +171,22 @@ for (let key in metiers) {
       mois,
       time,
       montant,
-      paye
+      paye,
+      eventId
     ]);
 
   });
 
   // 🔹 11. Écriture en une seule fois (🚀 GROS gain de performance)
-  if (rows.length > 0) {
-    sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
-  }
+if (!rows || rows.length === 0) {
+  console.log("Aucun nouvel événement à ajouter");
+} else {
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+}
 
-  
-
-  Logger.log("Import terminé !");
+  //Logger.log("Import terminé !");
+  console.log("Import terminé !");
 
   const now = Utilities.formatDate(
   new Date(),
@@ -250,7 +257,7 @@ function doGet() {
 
         <br>
 
-        <a href="https://docs.google.com/spreadsheets/d/1DIfRb54znMJvk54nptDzJkA4Qz2Dv6e77PjK9E-YqDY/edit?gid=0#gid=0" target="_blank">
+        <a href="https://docs.google.com/spreadsheets/d/18MqfHk4_feB8lWY8mH0r3YuBynGJNGlbhrrvfhN_b6g/edit?gid=1226754368#gid=1226754368" target="_blank">
           📊 Voir le tableau
         </a>
 
