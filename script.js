@@ -174,7 +174,7 @@ for (let key in metiers) {
       paye,
       eventId
     ]);
-
+    sheet.hideColumns(9);
   });
 
   // 🔹 11. Écriture en une seule fois (🚀 GROS gain de performance)
