@@ -35,9 +35,11 @@ if (lastRow > 1) {
 }
 
 // 🔥 NORMALISATION (très important)
-existingIds = existingIds.map(id => id.toString().trim());
 
-const existingIdsSet = new Set(existingIds);
+const existingIdsSet = new Set(
+  existingIds.map(id => id.toString().trim())
+);
+
 
   // 🔹 5. Choisir l'agenda (ici agenda principal)
   //const calendar = CalendarApp.getCalendarsByName("Agenda de nous ! ")[0];
@@ -190,13 +192,12 @@ for (let key in metiers) {
 
   });
   
-    sheet.hideColumns(9);
 
   // 🔹 11. Écriture en une seule fois (🚀 GROS gain de performance)
-if (!rows || rows.length === 0) {
+if (rows.length === 0) {
   console.log("Aucun nouvel événement à ajouter");
 } else {
-  const startRow = sheet.getLastRow() + 1;
+  const startRow = lastRow + 1;
   sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
 }
 
@@ -210,6 +211,7 @@ if (!rows || rows.length === 0) {
 );
 
 sheet.getRange("K1").setValue("Dernière mise à jour : " + now);
+sheet.hideColumns(9);
 }
 
 function onOpen() {
