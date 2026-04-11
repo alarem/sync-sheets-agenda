@@ -9,7 +9,9 @@ function importBusinessEvents() {
     sheet = ss.insertSheet("RDV");
   }
 
-if (sheet.getLastRow() === 0) {
+let lastRow = sheet.getLastRow();
+
+if (lastRow === 0) {
   sheet.appendRow([
     "Métier",
     "Client/Lieu",
@@ -21,8 +23,8 @@ if (sheet.getLastRow() === 0) {
     "Payé",
     "EventID"
   ]);
+  lastRow = 1; // 🔥 IMPORTANT
 }
-const lastRow = sheet.getLastRow();
 
 let existingIds = [];
 
@@ -158,7 +160,6 @@ for (let key in metiers) {
     let montant = 0;
 
     // 🔹 détecter € OU "euros"
-    //const matches = description.match(/(\d+(?:[.,]\d+)?)\s*(€|euros?|eur)/gi);
     const matches = description.match(/(\d+[.,]?\d*)\s*(€|eur|euros?)/gi);
 
     if (matches) {
@@ -197,11 +198,14 @@ for (let key in metiers) {
 if (rows.length === 0) {
   console.log("Aucun nouvel événement à ajouter");
 } else {
-  const startRow = lastRow + 1;
-  sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+const startRow = lastRow + 1;
+
+sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+
+// 🔥 Mise à jour de lastRow
+lastRow += rows.length;
 }
 
-  //Logger.log("Import terminé !");
   console.log("Import terminé !");
 
   const now = Utilities.formatDate(
@@ -211,7 +215,9 @@ if (rows.length === 0) {
 );
 
 sheet.getRange("K1").setValue("Dernière mise à jour : " + now);
-sheet.hideColumns(9);
+if (!sheet.isColumnHiddenByUser(9)) {
+  sheet.hideColumns(9);
+}
 }
 
 function onOpen() {
