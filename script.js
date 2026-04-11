@@ -82,7 +82,11 @@ const existingIdsSet = new Set(
 
     // 🔸 9. Filtrer uniquement les événements pro
     const originalTitle = title.trim();
-    const lowerTitle = originalTitle.toLowerCase().replace(/\u00A0/g, " ").trim();
+    let lowerTitle = originalTitle.toLowerCase().replace(/\u00A0/g, " ").trim();
+
+    // 🔥 SUPPRIMER LES HEURES AVANT ANALYSE
+    lowerTitle = lowerTitle.replace(/\b\d{1,2}(h\d{0,2}|:\d{2}|h)\b/gi, "");
+    lowerTitle = lowerTitle.replace(/\s+/g, " ").trim();
 
     // 🔴 EXCLUSION
     if (lowerTitle.includes("pole art italy")) {
@@ -119,16 +123,18 @@ for (let key in metiers) {
     // 🔸 10. Nettoyer le titre (enlever [HYPNO] etc.)
     let cleanTitle = originalTitle;
 
+    // 🔥 enlever le mot métier AU DÉBUT (sans dépendre de lowerTitle)
     for (let key in metiers) {
-      const keyword = metiers[key].find(k => lowerTitle.startsWith(k.toLowerCase()));
-      
-      if (keyword) {
-        cleanTitle = originalTitle.substring(keyword.length).trim();
-        break;
+      for (let keyword of metiers[key]) {
+        const regex = new RegExp("^" + keyword, "i");
+        if (regex.test(cleanTitle)) {
+          cleanTitle = cleanTitle.replace(regex, "").trim();
+          break;
+        }
       }
     }
     // 🔥 SUPPRIMER LES HEURES (AJOUT IMPORTANT)
-    cleanTitle = cleanTitle.replace(/\b\d{1,2}([hH:]\d{2})?\b/g, "");
+    cleanTitle = cleanTitle.replace(/\b\d{1,2}(h\d{0,2}|:\d{2}|h)\b/gi, "");
     // nettoyer les espaces
     cleanTitle = cleanTitle.replace(/\s+/g, " ").trim();
 
