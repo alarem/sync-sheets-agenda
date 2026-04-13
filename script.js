@@ -1,18 +1,20 @@
+//fonction principale
 function importBusinessEvents() {
 
   // 🔹 1. Récupérer le fichier Google Sheets actif
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // 🔹 2. Récupérer la feuille "RDV" (ou la créer si elle n'existe pas)
+  // 🔹 2. Récupérer la feuille "RDV" 
   let sheet = ss.getSheetByName("RDV");
-  if (!sheet) {
+  //si elle n'existe pas la créer
+  if (!sheet) {  
     sheet = ss.insertSheet("RDV");
   }
 
-let lastRow = sheet.getLastRow();
+let lastRow = sheet.getLastRow(); //Donne-moi le numéro de la dernière ligne remplie dans la feuille
 
-if (lastRow === 0) {
-  sheet.appendRow([
+if (lastRow === 0) {              //si la feuille est vide
+  sheet.appendRow([               // remplir entête
     "Métier",
     "Client/Lieu",
     "Prestation",
@@ -23,53 +25,51 @@ if (lastRow === 0) {
     "Payé",
     "EventID"
   ]);
-  lastRow = 1; // 🔥 IMPORTANT
+  lastRow = 1; // 🔥 IMPORTANT, la dernière ligne remplie dans la feuille devient 1
 }
 
 let existingIds = [];
 
-if (lastRow > 1) {
+if (lastRow > 1) {      //si données présentes
   existingIds = sheet
-    .getRange(2, 9, lastRow - 1, 1)
-    .getValues()
-    .flat()
+    .getRange(2, 9, lastRow - 1, 1) //récupère les données
+    .getValues()        //Retourne un tableau 2D
+    .flat()             // Transforme en tableau simple :
     .filter(String); // 🔥 enlève vides
 }
 
 // 🔥 NORMALISATION (très important)
 
 const existingIdsSet = new Set(
-  existingIds.map(id => id.toString().trim())
+  existingIds.map(id => id.toString().trim())   //nettoies chaque ID, toString() → au cas où c’est un nombre (sécurité), trim() → enlève les espaces avant/après
 );
 
 
-  // 🔹 5. Choisir l'agenda (ici agenda principal)
-  //const calendar = CalendarApp.getCalendarsByName("Agenda de nous ! ")[0];
-  const calendars = CalendarApp.getAllCalendars();
+  // 🔹 5. Choisir l'agenda
+  const calendars = CalendarApp.getAllCalendars();  //Récupère TOUS les agendas liés à mon compte Google
 
   // 🔹 6. Définir la période (modifiable)
   const startDate = new Date("2026-01-01"); // début large
-  const endDate = new Date("2027-01-01");   // fin large
+  const endDate = new Date("2027-01-01");   // fin large // new Date (); aujourd'hui
 
   // 🔹 7. Récupérer tous les événements
-  //const events = calendar.getEvents(startDate, endDate);
-  let events = [];
+  let events = [];    //crées une boîte vide
 
-  calendars.forEach(cal => {
-    const calEvents = cal.getEvents(startDate, endDate, {max: 500});
+  calendars.forEach(cal => {      //Pour chaque agenda
+    const calEvents = cal.getEvents(startDate, endDate);
     events = events.concat(calEvents);
   });
 
-  const rows = [];
-  const seenEvents = new Set();
+  const rows = [];              //crées un tableau vide
+  const seenEvents = new Set(); //stocker les informations dedans
 
   // 🔹 DEBUG : nombre d'événements trouvés
-  console.log("Nombre d'événements : " + events.length);
+  console.log("Nombre d'événements : " + events.length); // afficher dans la console le nombre d'événement
 
   // 🔹 8. Parcourir chaque événement
   events.forEach(event => {
 
-    const eventId = event.getId().toString().trim();
+    const eventId = event.getId().toString().trim(); //récupères l’identifiant unique de l’événement,assure format texte, nettoie
     // 🔁 éviter doublons dans le script
     if (seenEvents.has(eventId)) return;
     seenEvents.add(eventId);
@@ -89,7 +89,7 @@ const existingIdsSet = new Set(
     lowerTitle = lowerTitle.replace(/\s+/g, " ").trim();
 
     // 🔴 EXCLUSION
-    if (lowerTitle.includes("pole art italy")) {
+    if (lowerTitle.includes("pole art italy")) {    //ne pas tenir compte de "pole art italy"
       return;
     }
 
@@ -133,13 +133,13 @@ for (let key in metiers) {
         }
       }
     }
-    // 🔥 SUPPRIMER LES HEURES (AJOUT IMPORTANT)
-    cleanTitle = cleanTitle.replace(/\b\d{1,2}(h\d{0,2}|:\d{2}|h)\b/gi, "");
-    // nettoyer les espaces
+    // 🔥 SUPPRIMER LES HEURES (version finale propre)
+    cleanTitle = cleanTitle.replace(/\b\d{1,2}\s*(h\s*\d{0,2}|:\s*\d{2})?\b/gi, "");
+    cleanTitle = cleanTitle.replace(/\bh\b/gi, "");
     cleanTitle = cleanTitle.replace(/\s+/g, " ").trim();
 
     // 🔸 11. Séparer client et prestation
-    const parts = cleanTitle.split(" - ");
+    const parts = cleanTitle.split(/\s*-\s*/);
     const client = parts[0] || "";
     const prestation = parts[1] || "";
 
@@ -163,7 +163,7 @@ for (let key in metiers) {
     );
 
     // 🔸 13. Extraire le montant depuis la description
-    let montant = 0;
+    let montant = 0;    //montant 
 
     // 🔹 détecter € OU "euros"
     const matches = description.match(/(\d+[.,]?\d*)\s*(€|eur|euros?)/gi);
@@ -246,53 +246,7 @@ function boutonMobile() {
 
 function doGet() {
   importBusinessEvents();
-/*
-  return HtmlService.createHtmlOutput(`
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-          body {
-            font-family: Arial;
-            text-align: center;
-            padding: 40px;
-          }
-          button {
-            padding: 15px;
-            font-size: 16px;
-            margin: 10px;
-            border-radius: 8px;
-            border: none;
-            background: #4CAF50;
-            color: white;
-          }
-          a {
-            display: inline-block;
-            margin-top: 15px;
-            font-size: 16px;
-          }
-        </style>
-      </head>
-      <body>
-
-        <h2>📱 Gestion RDV</h2>
-
-        <p>✅ Mise à jour effectuée</p>
-
-        <button onclick="window.location.reload()">
-          🔄 Actualiser
-        </button>
-
-        <br>
-
-        <a href="https://docs.google.com/spreadsheets/d/18MqfHk4_feB8lWY8mH0r3YuBynGJNGlbhrrvfhN_b6g/edit?gid=1226754368#gid=1226754368" target="_blank">
-          📊 Voir le tableau
-        </a>
-
-      </body>
-    </html>
-  `);
-  */
+  return ContentService.createTextOutput("OK");
 }
 
 
