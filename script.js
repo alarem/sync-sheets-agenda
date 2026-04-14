@@ -26,6 +26,7 @@ if (lastRow === 0) {              //si la feuille est vide
     "mode Paiement",
     "N° de téléphones",
     "Adresse emails",
+    "Numéro de Facture",
     "EventID"
   ]);
   lastRow = 1; // 🔥 IMPORTANT, la dernière ligne remplie dans la feuille devient 1
@@ -35,7 +36,7 @@ let existingIds = [];
 
 if (lastRow > 1) {      //si données présentes
   existingIds = sheet
-    .getRange(2, 12, lastRow - 1, 1) //récupère les données
+    .getRange(2, 13, lastRow - 1, 1) //récupère les données
     .getValues()        //Retourne un tableau 2D
     .flat()             // Transforme en tableau simple :
     .filter(String); // 🔥 enlève vides
@@ -141,31 +142,56 @@ for (let key in metiers) {
     cleanTitle = cleanTitle.replace(/\bh\b/gi, "");
     cleanTitle = cleanTitle.replace(/\s+/g, " ").trim();
 
-    // 🔸 11. Séparer client et ville
-    const parts = cleanTitle.split(/\s*-\s*/);
-    const client = parts[0] || "";
-    const ville = parts[1] || "";
+    // 🔹 Fusion texte
+    const fullText = (title + " " + description)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "");
 
-    // 🔸 12. Formater date et heure
+    // 🔹 Ville
+    const villes = ["marseille", "arles", "aix", "paris", "lyon", "nice", "st paul de mausole"];
+    let ville = "";
+
+    for (let v of villes) {
+      if (fullText.includes(v)) {
+        ville = v;
+        break;
+      }
+    }
+
+    // 🔹 Client (nom prénom)
+    let client = "";
+    const nameMatch = title.match(
+      /\b([A-Z][a-zàâçéèêëîïôûùüÿñ-]+)\s([A-Z][a-zàâçéèêëîûùüÿñ-]+)\b/
+    );
+
+    if (nameMatch) {
+      client = nameMatch[0];
+    } else {
+      client = cleanTitle;
+    }
+
+    // 🔸 12. Formater date
     const date = Utilities.formatDate(
       start,
       Session.getScriptTimeZone(),
       "yyyy-MM-dd"
     );
 
+    // 🔸 13. Formater heure
     const time = Utilities.formatDate(
       start,
       Session.getScriptTimeZone(),
       "HH:mm"
     );
-
+    // 🔸 13. Formater mois
     const mois = Utilities.formatDate(
       start,
       Session.getScriptTimeZone(),
       "yyyy-MM"
     );
 
-    // 🔸 13. Extraire le montant depuis la description
+    // 🔸 14. Extraire le montant depuis la description
     let montant = 0;    //montant 
 
     // 🔹 détecter € OU "euros"
@@ -180,7 +206,7 @@ for (let key in metiers) {
       });
     }
 
-    // 🔸 14. Extraire le statut payé
+    // 🔸 15. Extraire le statut payé
     let paye = "Non";
 
     // 🔥 détecte payé / payée / payés / payées MAIS PAS "heures payées"
@@ -193,7 +219,7 @@ for (let key in metiers) {
       paye = "Oui";
     }
 
-    // 🔸 15. Détecter le mode de paiement
+    // 🔸 16. Détecter le mode de paiement
     let modePaiement = "";
 
     const desc = description.toLowerCase();
@@ -208,7 +234,7 @@ for (let key in metiers) {
       modePaiement = "CB";
     }
 
-// 🔸 16. Détecter les numéros de téléphones
+// 🔸 17. Détecter les numéros de téléphones
     
     const phonesRaw = description.match(/\b(?:\+33|0)[1-9](?:[\s.-]?\d{2}){4}\b/g) || [];
 
@@ -216,12 +242,15 @@ for (let key in metiers) {
       p.replace(/\s|\./g, "").replace(/^0/, "+33")
     ).join(", ");
 
-// 🔸 17. Détecter les numéros adresse mails
+// 🔸 18. Détecter les numéros adresse mails
     const emails = (description.match(
     /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
     ) || []).join(", ");
 
-    // 🔸 18. Ajouter au tableau (🚀 plus rapide que appendRow)
+// 🔸 19. créer le numéro de facture à partir de la date et de l'heure
+    const numeroFacture = "F-" + date.replace(/-/g, "") + "-" + time.split(":")[0];
+
+    // 🔸 20. Ajouter au tableau (🚀 plus rapide que appendRow)
     rows.push([
       metier,
       client,
@@ -234,6 +263,7 @@ for (let key in metiers) {
       modePaiement,
       phones,
       emails,
+      numeroFacture,
       eventId
     ]);
 
@@ -260,9 +290,9 @@ lastRow += rows.length;
   "dd/MM/yyyy HH:mm"
 );
 
-sheet.getRange("O1").setValue("Dernière mise à jour : " + now);
-if (!sheet.isColumnHiddenByUser(12)) {
-  sheet.hideColumns(12);
+sheet.getRange("P1").setValue("Dernière mise à jour : " + now);
+if (!sheet.isColumnHiddenByUser(13)) {
+  sheet.hideColumns(13);
 }
 }
 
@@ -275,11 +305,11 @@ function onOpen() {
 
 function boutonMobile() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
-  const value = sheet.getRange("O4").getValue();
+  const value = sheet.getRange("P4").getValue();
 
   if (value === true) {
     importBusinessEvents(); // ton script principal
-    sheet.getRange("O4").setValue(false); // reset
+    sheet.getRange("P4").setValue(false); // reset
   }
 
 }
