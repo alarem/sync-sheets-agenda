@@ -16,13 +16,16 @@ let lastRow = sheet.getLastRow(); //Donne-moi le numéro de la dernière ligne r
 if (lastRow === 0) {              //si la feuille est vide
   sheet.appendRow([               // remplir entête
     "Métier",
-    "Client/Lieu",
-    "Prestation",
+    "Client",
+    "Ville",
     "Date",
     "Mois",
     "Heure",
     "Montant",
     "Payé",
+    "mode Paiement",
+    "N° de téléphones",
+    "Adresse emails",
     "EventID"
   ]);
   lastRow = 1; // 🔥 IMPORTANT, la dernière ligne remplie dans la feuille devient 1
@@ -32,7 +35,7 @@ let existingIds = [];
 
 if (lastRow > 1) {      //si données présentes
   existingIds = sheet
-    .getRange(2, 9, lastRow - 1, 1) //récupère les données
+    .getRange(2, 12, lastRow - 1, 1) //récupère les données
     .getValues()        //Retourne un tableau 2D
     .flat()             // Transforme en tableau simple :
     .filter(String); // 🔥 enlève vides
@@ -138,10 +141,10 @@ for (let key in metiers) {
     cleanTitle = cleanTitle.replace(/\bh\b/gi, "");
     cleanTitle = cleanTitle.replace(/\s+/g, " ").trim();
 
-    // 🔸 11. Séparer client et prestation
+    // 🔸 11. Séparer client et ville
     const parts = cleanTitle.split(/\s*-\s*/);
     const client = parts[0] || "";
-    const prestation = parts[1] || "";
+    const ville = parts[1] || "";
 
     // 🔸 12. Formater date et heure
     const date = Utilities.formatDate(
@@ -179,28 +182,65 @@ for (let key in metiers) {
 
     // 🔸 14. Extraire le statut payé
     let paye = "Non";
-    const payeMatch = description.match(/Payé:\s*(Oui|Non)/i);
-    if (payeMatch) {
-      paye = payeMatch[1];
+
+    // 🔥 détecte payé / payée / payés / payées MAIS PAS "heures payées"
+    if (/\bpay[eé]e?s?\b/i.test(description) && !/heures?\s+pay[eé]e?s?\b/i.test(description)) {
+      paye = "Oui";
     }
 
-    // 🔹 Ajouter au tableau (🚀 plus rapide que appendRow)
+    // 🔥 détecte aussi réglé / réglée / réglés / réglées
+    if (/\br[eè]gl[eé]e?s?\b/i.test(description)) {
+      paye = "Oui";
+    }
+
+    // 🔸 15. Détecter le mode de paiement
+    let modePaiement = "";
+
+    const desc = description.toLowerCase();
+
+    if (/esp[eè]ces?/i.test(desc)) {
+      modePaiement = "Espèces";
+    } else if (/virement/i.test(desc)) {
+      modePaiement = "Virement";
+    } else if (/ch[eè]ques?/i.test(desc)) {
+      modePaiement = "Chèque";
+    } else if (/\b(cb|carte)\b/i.test(desc)) {
+      modePaiement = "CB";
+    }
+
+// 🔸 16. Détecter les numéros de téléphones
+    
+    const phonesRaw = description.match(/\b(?:\+33|0)[1-9](?:[\s.-]?\d{2}){4}\b/g) || [];
+
+    const phones = phonesRaw.map(p =>
+      p.replace(/\s|\./g, "").replace(/^0/, "+33")
+    ).join(", ");
+
+// 🔸 17. Détecter les numéros adresse mails
+    const emails = (description.match(
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
+    ) || []).join(", ");
+
+    // 🔸 18. Ajouter au tableau (🚀 plus rapide que appendRow)
     rows.push([
       metier,
       client,
-      prestation,
+      ville,
       date,
       mois,
       time,
       montant,
       paye,
+      modePaiement,
+      phones,
+      emails,
       eventId
     ]);
 
   });
   
 
-  // 🔹 11. Écriture en une seule fois (🚀 GROS gain de performance)
+  // 🔹 19. Écriture en une seule fois (🚀 GROS gain de performance)
 if (rows.length === 0) {
   console.log("Aucun nouvel événement à ajouter");
 } else {
@@ -220,9 +260,9 @@ lastRow += rows.length;
   "dd/MM/yyyy HH:mm"
 );
 
-sheet.getRange("K1").setValue("Dernière mise à jour : " + now);
-if (!sheet.isColumnHiddenByUser(9)) {
-  sheet.hideColumns(9);
+sheet.getRange("O1").setValue("Dernière mise à jour : " + now);
+if (!sheet.isColumnHiddenByUser(12)) {
+  sheet.hideColumns(12);
 }
 }
 
@@ -235,11 +275,11 @@ function onOpen() {
 
 function boutonMobile() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
-  const value = sheet.getRange("K4").getValue();
+  const value = sheet.getRange("O4").getValue();
 
   if (value === true) {
     importBusinessEvents(); // ton script principal
-    sheet.getRange("K4").setValue(false); // reset
+    sheet.getRange("O4").setValue(false); // reset
   }
 
 }
