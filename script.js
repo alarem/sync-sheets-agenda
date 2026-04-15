@@ -290,12 +290,16 @@ lastRow += rows.length;
   "dd/MM/yyyy HH:mm"
 );
 
+// 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P1
 sheet.getRange("P1").setValue("Dernière mise à jour : " + now);
+
+// 🔹 Permet de chacher la colonne avec les log google
 if (!sheet.isColumnHiddenByUser(13)) {
   sheet.hideColumns(13);
 }
 }
 
+// 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir d'un bouton dans le bandeau en haut
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu("🔄 Sync")
@@ -303,6 +307,7 @@ function onOpen() {
     .addToUi();
 }
 
+ // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir de la case à cocher
 function boutonMobile() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
   const value = sheet.getRange("P4").getValue();
@@ -314,6 +319,7 @@ function boutonMobile() {
 
 }
 
+ // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir d'un lien internet
 function doGet() {
   importBusinessEvents();
   return ContentService.createTextOutput("OK");
