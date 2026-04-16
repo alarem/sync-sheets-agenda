@@ -17,7 +17,6 @@ if (lastRow === 0) {              //si la feuille est vide
   sheet.appendRow([               // remplir entête
     "Métier",
     "Client",
-    "Ville",
     "Date",
     "Mois",
     "Heure",
@@ -36,7 +35,7 @@ let existingIds = [];
 
 if (lastRow > 1) {      //si données présentes
   existingIds = sheet
-    .getRange(2, 13, lastRow - 1, 1) //récupère les données
+    .getRange(2, 12, lastRow - 1, 1) //récupère les données
     .getValues()        //Retourne un tableau 2D
     .flat()             // Transforme en tableau simple :
     .filter(String); // 🔥 enlève vides
@@ -88,11 +87,7 @@ const existingIdsSet = new Set(
     const originalTitle = title.trim();
     let lowerTitle = originalTitle.toLowerCase().replace(/\u00A0/g, " ").trim();
 
-    // 🔥 SUPPRIMER LES HEURES AVANT ANALYSE
-    lowerTitle = lowerTitle.replace(/\b\d{1,2}(h\d{0,2}|:\d{2}|h)\b/gi, "");
-    lowerTitle = lowerTitle.replace(/\s+/g, " ").trim();
-
-    // 🔴 EXCLUSION
+      // 🔴 EXCLUSION
     if (lowerTitle.includes("pole art italy")) {    //ne pas tenir compte de "pole art italy"
       return;
     }
@@ -105,15 +100,15 @@ const existingIdsSet = new Set(
       "Pole": ["pole", "stage"]
     };
 
-for (let key in metiers) {
+    for (let key in metiers) {
 
-  // 🔸 WT / AWT partout
-  if (key === "Visite") {
-    if (/\b(a?wt)\b/i.test(lowerTitle)) {
-      metier = "Visite";
-      break;
-    }
-  }
+      // 🔸 WT / AWT partout
+      if (key === "Visite") {
+        if (/\b(a?wt)\b/i.test(lowerTitle)) {
+          metier = "Visite";
+          break;
+        }
+      }
 
   // 🔸 cas classique
   if (metiers[key].some(keyword => lowerTitle.startsWith(keyword))) {
@@ -121,7 +116,6 @@ for (let key in metiers) {
     break;
   }
 }
-
     if (!metier) return;   
 
     // 🔸 10. Nettoyer le titre (enlever [HYPNO] etc.)
@@ -141,35 +135,7 @@ for (let key in metiers) {
     cleanTitle = cleanTitle.replace(/\b\d{1,2}\s*(h\s*\d{0,2}|:\s*\d{2})?\b/gi, "");
     cleanTitle = cleanTitle.replace(/\bh\b/gi, "");
     cleanTitle = cleanTitle.replace(/\s+/g, " ").trim();
-
-    // 🔹 Fusion texte
-    const fullText = (title + " " + description)
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "");
-
-    // 🔹 Ville
-    const villes = ["marseille", "arles", "aix", "paris", "lyon", "nice", "st paul de mausole"];
-    let ville = "";
-
-    for (let v of villes) {
-      if (fullText.includes(v)) {
-        ville = v;
-        break;
-      }
-    }
-
-    // 🔹 Client (nom prénom)
-    let client = "";
-    const nameMatch = title.match(
-      /\b([A-Z][a-zàâçéèêëîïôûùüÿñ-]+)\s([A-Z][a-zàâçéèêëîûùüÿñ-]+)\b/
-    );
-
-    if (nameMatch) {
-      client = nameMatch[0];
-    } else {
-      client = cleanTitle;
-    }
+    let client = cleanTitle;
 
     // 🔸 12. Formater date
     const date = Utilities.formatDate(
@@ -206,33 +172,33 @@ for (let key in metiers) {
       });
     }
 
-    // 🔸 15. Extraire le statut payé
-    let paye = "Non";
-
-    // 🔥 détecte payé / payée / payés / payées MAIS PAS "heures payées"
-    if (/\bpay[eé]e?s?\b/i.test(description) && !/heures?\s+pay[eé]e?s?\b/i.test(description)) {
-      paye = "Oui";
-    }
-
-    // 🔥 détecte aussi réglé / réglée / réglés / réglées
-    if (/\br[eè]gl[eé]e?s?\b/i.test(description)) {
-      paye = "Oui";
-    }
-
-    // 🔸 16. Détecter le mode de paiement
+    // 🔸 15. Détecter le mode de paiement
     let modePaiement = "";
 
-    const desc = description.toLowerCase();
+    const desc = description.toLowerCase()
+                            .normalize("NFD")
+                           .replace(/\p{Diacritic}/gu, "");
 
-    if (/esp[eè]ces?/i.test(desc)) {
+    if (/especes?/i.test(desc)) {
       modePaiement = "Espèces";
     } else if (/virement/i.test(desc)) {
       modePaiement = "Virement";
-    } else if (/ch[eè]ques?/i.test(desc)) {
+    } else if (/cheques?/i.test(desc)) {
       modePaiement = "Chèque";
     } else if (/\b(cb|carte)\b/i.test(desc)) {
       modePaiement = "CB";
     }
+
+    // 🔸 16. Extraire le statut payé
+    let paye = "Non";
+
+    // 🔥 détecte payé / payée / payés / payées MAIS PAS "heures payées"
+    if (
+        /\bpaye?s?\b/i.test(desc) &&
+        !/heures?\s+payee?s?\b/i.test(desc)
+          ) {
+            paye = "Oui";
+          }
 
 // 🔸 17. Détecter les numéros de téléphones
     
@@ -254,7 +220,6 @@ for (let key in metiers) {
     rows.push([
       metier,
       client,
-      ville,
       date,
       mois,
       time,
@@ -293,17 +258,23 @@ lastRow += rows.length;
 // 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P1
 sheet.getRange("P1").setValue("Dernière mise à jour : " + now);
 
-// 🔹 Permet de chacher la colonne avec les log google
-if (!sheet.isColumnHiddenByUser(13)) {
-  sheet.hideColumns(13);
+// 🔹 Permet de cacher la colonne avec les log google
+if (!sheet.isColumnHiddenByUser(12)) {
+  sheet.hideColumns(12);
 }
 }
 
 // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir d'un bouton dans le bandeau en haut
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
+
   ui.createMenu("🔄 Sync")
     .addItem("Actualiser les RDV", "importBusinessEvents")
+    .addToUi();
+
+  ui.createMenu("📄 Facture")
+    .addItem("Générer PDF", "genererPDF")
+    .addItem("Envoyer facture", "envoyerFacture")
     .addToUi();
 }
 
@@ -325,5 +296,66 @@ function doGet() {
   return ContentService.createTextOutput("OK");
 }
 
+// 🔹 Permet de générer une facture en PDF et de l'enregistrer dans le drive
+function genererPDF() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Facture");
 
+  const numeroFacture = sheet.getRange("F6").getValue();
 
+  if (!numeroFacture) {
+    SpreadsheetApp.getUi().alert("Numéro de facture manquant");
+    return;
+  }
+
+  const url = ss.getUrl().replace(/edit$/, "");
+  
+  const exportUrl = url + "export?format=pdf" +
+    "&gid=" + sheet.getSheetId() +
+    "&portrait=true" +
+    "&fitw=true" +
+    "&top_margin=0.5" +
+    "&bottom_margin=0.5" +
+    "&left_margin=0.5" +
+    "&right_margin=0.5" +
+    "&sheetnames=false&printtitle=false&pagenumbers=false&gridlines=false";
+
+  const token = ScriptApp.getOAuthToken();
+
+  const response = UrlFetchApp.fetch(exportUrl, {
+    headers: {
+      Authorization: "Bearer " + token
+    }
+  });
+
+  const blob = response.getBlob().setName(numeroFacture + ".pdf");
+
+  // 📁 Sauvegarde dans Drive
+  const folder = DriveApp.getFolderById("1SLFLRLfLy-AiRPNDleOCBz5nbEDF54dX"); // à remplacer
+  folder.createFile(blob);
+
+  return blob;
+}
+
+function envoyerFacture() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Facture");
+
+  const numeroFacture = sheet.getRange("F6").getValue();
+  const email = sheet.getRange("J6").getValue(); // adapte selon ta cellule
+  const client = sheet.getRange("F4").getValue();
+
+  if (!email) {
+    SpreadsheetApp.getUi().alert("Email manquant");
+    return;
+  }
+
+  const pdf = genererPDF();
+
+  MailApp.sendEmail({
+    to: email,
+    subject: "Facture " + numeroFacture,
+    body: "Bonjour " + client + ",\n\nVeuillez trouver votre facture en pièce jointe.\n\nCordialement",
+    attachments: [pdf]
+  });
+}
