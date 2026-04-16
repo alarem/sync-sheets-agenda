@@ -351,11 +351,46 @@ function envoyerFacture() {
   }
 
   const pdf = genererPDF();
+  const image = DriveApp.getFileById("1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy").getBlob();
+  const iconInsta = DriveApp.getFileById("17kKuvOmaY76_r63cYsxe7kTiDaf0c4tc").getBlob();
+  const qrCode = DriveApp.getFileById("1DZZqptFpKIUkmLX6dCr1Yh3ReQrNyKJP").getBlob();
 
-  MailApp.sendEmail({
-    to: email,
-    subject: "Facture " + numeroFacture,
-    body: "Bonjour " + client + ",\n\nVeuillez trouver votre facture en pièce jointe.\n\nCordialement",
-    attachments: [pdf]
-  });
+MailApp.sendEmail({
+  to: email,
+  subject: "Facture " + numeroFacture,
+
+  htmlBody: `
+    <p>Bonjour ${client},</p>
+
+    <p>Veuillez trouver en pièce jointe votre facture <strong>${numeroFacture}</strong>.</p>
+
+    <p>Merci pour votre confiance 🙏</p>
+
+    <br>
+
+    <p>Cordialement<br>
+    Sandy ROYET</p>
+
+    <br>
+
+    <img src="cid:signature" style="width:200px; height:auto;"><br><br>
+
+    <a href="https://www.instagram.com/sandy_hypno/" target="_blank">
+        <img src="cid:insta" style="width:30px;">
+      </a>
+
+      <br><br>
+
+      <!-- QR Code -->
+      <img src="cid:qrcode" style="width:100px;">
+
+  `,
+
+  attachments: [pdf],
+  inlineImages: {
+    signature: image,
+    qrcode: qrCode,
+    insta: iconInsta
+  }
+});
 }
