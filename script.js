@@ -353,7 +353,8 @@ function envoyerFacture() {
   const pdf = genererPDF();
   const image = DriveApp.getFileById("1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy").getBlob();
   const iconInsta = DriveApp.getFileById("17kKuvOmaY76_r63cYsxe7kTiDaf0c4tc").getBlob();
-  const qrCode = DriveApp.getFileById("1DZZqptFpKIUkmLX6dCr1Yh3ReQrNyKJP").getBlob();
+  const iconFacebook = DriveApp.getFileById("17KdX9oV8TwQUVC6LgqMyN1lCoFR29XOW").getBlob();
+  const iconMaps = DriveApp.getFileById("1_ojXvVn7B97v21prV5WDC4pUqNzMotom").getBlob();
 
 MailApp.sendEmail({
   to: email,
@@ -375,22 +376,35 @@ MailApp.sendEmail({
 
     <img src="cid:signature" style="width:200px; height:auto;"><br><br>
 
-    <a href="https://www.instagram.com/sandy_hypno/" target="_blank">
-        <img src="cid:insta" style="width:30px;">
+<table>
+  <tr>
+    <td>
+      <a href="https://www.instagram.com/sandy_hypno/">
+        <img src="cid:insta" width="30">
       </a>
-
-      <br><br>
-
-      <!-- QR Code -->
-      <img src="cid:qrcode" style="width:100px;">
-
+    </td>
+    <td width="10"></td> <!-- espace -->
+    <td>
+      <a href="https://www.facebook.com/share/1aLWmSqeii/">
+        <img src="cid:facebook" width="30">
+      </a>
+    </td>
+    <td width="10"></td>
+    <td>
+      <a href="https://maps.app.goo.gl/ZbCGRXKUntZTxT1F6">
+        <img src="cid:maps" width="30">
+      </a>
+    </td>
+  </tr>
+</table> 
   `,
 
   attachments: [pdf],
   inlineImages: {
     signature: image,
-    qrcode: qrCode,
-    insta: iconInsta
+    insta: iconInsta,
+    facebook: iconFacebook,
+    maps: iconMaps
   }
 });
 }
