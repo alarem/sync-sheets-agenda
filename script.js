@@ -214,7 +214,8 @@ const existingIdsSet = new Set(
     ) || []).join(", ");
 
 // 🔸 19. créer le numéro de facture à partir de la date et de l'heure
-    const numeroFacture = "F-" + date.replace(/-/g, "") + "-" + time.split(":")[0];
+    //const numeroFacture = "F-" + date.replace(/-/g, "") + "-" + time.split(":")[0];
+    const numeroFacture ="";
 
     // 🔸 20. Ajouter au tableau (🚀 plus rapide que appendRow)
     rows.push([
@@ -254,6 +255,11 @@ lastRow += rows.length;
   Session.getScriptTimeZone(),
   "dd/MM/yyyy HH:mm"
 );
+
+sheet.getRange(2, 1, sheet.getLastRow()-1, sheet.getLastColumn())
+  .sort([{column: 3, ascending: true}, {column: 5, ascending: true}]);
+
+genererNumerosFacture();
 
 // 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P1
 sheet.getRange("P1").setValue("Dernière mise à jour : " + now);
@@ -296,6 +302,39 @@ function doGet() {
   return ContentService.createTextOutput("OK");
 }
 
+// 🔹 Permet de générer un numéro de facture
+function genererNumerosFacture() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
+  const data = sheet.getRange(2, 1, sheet.getLastRow()-1, 12).getValues();
+
+  let compteur = 1;
+
+  for (let i = 0; i < data.length; i++) {
+
+    const metier = data[i][0];   // colonne Métier
+    const date = data[i][2];     // colonne Date
+    const numeroExistant = data[i][10]; // colonne facture
+    let numeroFacture = "";
+    
+    // 🔒 SI déjà un numéro → on ne touche pas
+    if (numeroExistant) continue;
+
+    if (metier === "Hypno"&& date) {
+
+      const year = new Date(date).getFullYear();
+
+      const numero = String(compteur).padStart(3, "0");
+
+      numeroFacture = `HYP-${year}-${numero}`;
+
+      compteur++;
+    }
+
+    // écrire en colonne 11 (Numéro de facture)
+    sheet.getRange(i + 2, 11).setValue(numeroFacture);
+  }
+}
+
 // 🔹 Permet de générer une facture en PDF et de l'enregistrer dans le drive
 function genererPDF() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -306,6 +345,13 @@ function genererPDF() {
   if (!numeroFacture) {
     SpreadsheetApp.getUi().alert("Numéro de facture manquant");
     return;
+  }
+  const folder = DriveApp.getFolderById("1SLFLRLfLy-AiRPNDleOCBz5nbEDF54dX"); 
+  // 🔍 Vérifier si fichier existe déjà
+  const files = folder.getFilesByName(numeroFacture + ".pdf");
+
+  if (files.hasNext()) {
+    return files.next().getBlob(); // 👉 on retourne l'existant
   }
 
   const url = ss.getUrl().replace(/edit$/, "");
@@ -331,7 +377,6 @@ function genererPDF() {
   const blob = response.getBlob().setName(numeroFacture + ".pdf");
 
   // 📁 Sauvegarde dans Drive
-  const folder = DriveApp.getFolderById("1SLFLRLfLy-AiRPNDleOCBz5nbEDF54dX"); // à remplacer
   folder.createFile(blob);
 
   return blob;
