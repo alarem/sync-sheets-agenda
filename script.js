@@ -26,6 +26,7 @@ if (lastRow === 0) {              //si la feuille est vide
     "N° de téléphones",
     "Adresse emails",
     "Numéro de Facture",
+    "Suivi 15j",
     "EventID"
   ]);
   lastRow = 1; // 🔥 IMPORTANT, la dernière ligne remplie dans la feuille devient 1
@@ -35,7 +36,7 @@ let existingIds = [];
 
 if (lastRow > 1) {      //si données présentes
   existingIds = sheet
-    .getRange(2, 12, lastRow - 1, 1) //récupère les données
+    .getRange(2, 13, lastRow - 1, 1) //récupère les données
     .getValues()        //Retourne un tableau 2D
     .flat()             // Transforme en tableau simple :
     .filter(String); // 🔥 enlève vides
@@ -81,6 +82,11 @@ const existingIdsSet = new Set(
     
     const title = event.getTitle() || "";           // ex: HYPNO Dupont - Séance
     const description = event.getDescription() || ""; //  || "" évite les crash si déscription vide
+    const desc = description
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, ""); // enlève accents
+
     const start = event.getStartTime();
 
     // 🔸 9. Filtrer uniquement les événements pro
@@ -161,7 +167,7 @@ const existingIdsSet = new Set(
     let montant = 0;    //montant 
 
     // 🔹 détecter € OU "euros"
-    const matches = description.match(/(\d+[.,]?\d*)\s*(€|eur|euros?)/gi);
+    const matches = description.match(/(\d+(?:[.,]\d+)?)\s*(€|eur|euros?)/gi);
 
     if (matches) {
       matches.forEach(m => {
@@ -175,17 +181,18 @@ const existingIdsSet = new Set(
     // 🔸 15. Détecter le mode de paiement
     let modePaiement = "";
 
-    const desc = description.toLowerCase()
-                            .normalize("NFD")
-                           .replace(/\p{Diacritic}/gu, "");
 
-    if (/especes?/i.test(desc)) {
+
+    if (/\bespeces?\b/.test(desc)) {
       modePaiement = "Espèces";
-    } else if (/virement/i.test(desc)) {
+    }
+    else if (/\bvirement\b/.test(desc)) {
       modePaiement = "Virement";
-    } else if (/cheques?/i.test(desc)) {
+    }
+    else if (/\bcheque?s?\b/.test(desc)) {
       modePaiement = "Chèque";
-    } else if (/\b(cb|carte)\b/i.test(desc)) {
+    }
+    else if (/\b(cb|carte)\b/.test(desc)) {
       modePaiement = "CB";
     }
 
@@ -194,11 +201,11 @@ const existingIdsSet = new Set(
 
     // 🔥 détecte payé / payée / payés / payées MAIS PAS "heures payées"
     if (
-        /\bpaye?s?\b/i.test(desc) &&
-        !/heures?\s+payee?s?\b/i.test(desc)
-          ) {
-            paye = "Oui";
-          }
+          /\bpaye?s?\b/i.test(desc) &&
+          !/heures?\s+paye[eé]s?\b/i.test(desc)
+        ) {
+          paye = "Oui";
+        }
 
 // 🔸 17. Détecter les numéros de téléphones
     
@@ -214,8 +221,17 @@ const existingIdsSet = new Set(
     ) || []).join(", ");
 
 // 🔸 19. créer le numéro de facture à partir de la date et de l'heure
-    //const numeroFacture = "F-" + date.replace(/-/g, "") + "-" + time.split(":")[0];
-    const numeroFacture ="";
+
+    let numeroFacture = "";
+
+    // 🔍 chercher un numéro type HYP-2026-001
+    const matchFacture = description.match(/\b[A-Z]{2,5}-\d{4}-\d{1,4}\b/i);
+
+    if (matchFacture) {
+      numeroFacture = matchFacture[0].toUpperCase();
+    }
+
+    let suivi = "";
 
     // 🔸 20. Ajouter au tableau (🚀 plus rapide que appendRow)
     rows.push([
@@ -230,6 +246,7 @@ const existingIdsSet = new Set(
       phones,
       emails,
       numeroFacture,
+      suivi,
       eventId
     ]);
 
@@ -265,8 +282,8 @@ genererNumerosFacture();
 sheet.getRange("P1").setValue("Dernière mise à jour : " + now);
 
 // 🔹 Permet de cacher la colonne avec les log google
-if (!sheet.isColumnHiddenByUser(12)) {
-  sheet.hideColumns(12);
+if (!sheet.isColumnHiddenByUser(13)) {
+  sheet.hideColumns(13);
 }
 }
 
@@ -452,4 +469,98 @@ MailApp.sendEmail({
     maps: iconMaps
   }
 });
+}
+
+function suiviHypnoJ15() {
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
+  const data = sheet.getDataRange().getValues();
+
+  const today = new Date();
+
+  for (let i = 1; i < data.length; i++) {
+
+    const metier = data[i][0];
+    const nom = data[i][1];
+    const dateSeance = new Date(data[i][2]);
+    const email = data[i][9];
+    const suivi = data[i][12]; // ⚠️ adapte si colonne différente
+
+    if (metier !== "Hypno") continue;
+    if (!email) continue;
+    if (suivi === "OUI") continue;
+
+    const diffTime = today - dateSeance;
+    const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+    if (diffDays >= 15 && diffDays < 16) {
+
+    const image = DriveApp.getFileById("1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy").getBlob();
+    const iconInsta = DriveApp.getFileById("17kKuvOmaY76_r63cYsxe7kTiDaf0c4tc").getBlob();
+    const iconFacebook = DriveApp.getFileById("17KdX9oV8TwQUVC6LgqMyN1lCoFR29XOW").getBlob();
+    const iconMaps = DriveApp.getFileById("1_ojXvVn7B97v21prV5WDC4pUqNzMotom").getBlob();
+
+      MailApp.sendEmail({
+  to: email,
+  subject: "Comment vous sentez-vous depuis votre séance ?",
+
+  htmlBody: `
+    <p>Bonjour ${nom},</p>
+
+    <p>J'espère que vous allez bien 🙂</p>
+
+    <p>Suite à votre séance d'hypnose, je souhaitais prendre de vos nouvelles.</p>
+
+    <p>
+    Avez-vous remarqué des changements ?<br>
+    Comment vous sentez-vous aujourd’hui ?
+    </p>
+
+    <p>Votre retour est toujours précieux 🙏</p>
+
+    <br>
+
+    <p>Au plaisir d'échanger avec vous,</p>
+
+    <p>Sandy ROYET</p>
+
+    <br>
+
+    <img src="cid:signature" style="width:200px; height:auto;"><br><br>
+
+    <table>
+      <tr>
+        <td>
+          <a href="https://www.instagram.com/sandy_hypno/">
+            <img src="cid:insta" width="30">
+          </a>
+        </td>
+        <td width="10"></td>
+        <td>
+          <a href="https://www.facebook.com/share/1aLWmSqeii/">
+            <img src="cid:facebook" width="30">
+          </a>
+        </td>
+        <td width="10"></td>
+        <td>
+          <a href="https://maps.app.goo.gl/ZbCGRXKUntZTxT1F6">
+            <img src="cid:maps" width="30">
+          </a>
+        </td>
+      </tr>
+    </table>
+  `,
+
+  inlineImages: {
+    signature: image,
+    insta: iconInsta,
+    facebook: iconFacebook,
+    maps: iconMaps
+  }
+});
+
+      // marquer comme envoyé
+      sheet.getRange(i + 1, 12).setValue("OUI");
+    }
+  }
 }
