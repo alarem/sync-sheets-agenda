@@ -225,7 +225,7 @@ const existingIdsSet = new Set(
     let numeroFacture = "";
 
     // 🔍 chercher un numéro type HYP-2026-001
-    const matchFacture = description.match(/\b[A-Z]{2,5}-\d{4}-\d{1,4}\b/i);
+    const matchFacture = description.match(/\b[A-Z]{2,5}[-_ ]?\d{4}[-_ ]?\d{1,4}\b/i);
 
     if (matchFacture) {
       numeroFacture = matchFacture[0].toUpperCase();
