@@ -25,9 +25,10 @@ if (lastRow === 0) {              //si la feuille est vide
     "mode Paiement",
     "N° de téléphones",
     "Adresse emails",
-    "Numéro de Facture",
-    "Suivi 15j",
-    "EventID"
+    "Numéro de Facture",   // 11 → index 10
+    "Facture Envoyée",     // 12 → index 11
+    "Suivi 15j",           // 13 → index 12
+    "EventID"              // 14 → index 13
   ]);
   lastRow = 1; // 🔥 IMPORTANT, la dernière ligne remplie dans la feuille devient 1
 }
@@ -36,7 +37,7 @@ let existingIds = [];
 
 if (lastRow > 1) {      //si données présentes
   existingIds = sheet
-    .getRange(2, 13, lastRow - 1, 1) //récupère les données
+    .getRange(2, 14, lastRow - 1, 1) //récupère les données
     .getValues()        //Retourne un tableau 2D
     .flat()             // Transforme en tableau simple :
     .filter(String); // 🔥 enlève vides
@@ -86,7 +87,19 @@ const existingIdsSet = new Set(
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, ""); // enlève accents
+    
+    // 🔸 détecter statut facture / suivi
 
+    let factureEnvoyee = "Non";
+    let suiviEnvoye = "Non";
+
+    if (desc.includes("facture envoyee")) {
+      factureEnvoyee = "oui";
+    }
+
+    if (desc.includes("suivi envoye")) {
+      suiviEnvoye = "oui";
+    }
     const start = event.getStartTime();
 
     // 🔸 9. Filtrer uniquement les événements pro
@@ -204,7 +217,7 @@ const existingIdsSet = new Set(
           /\bpaye?s?\b/i.test(desc) &&
           !/heures?\s+paye[eé]s?\b/i.test(desc)
         ) {
-          paye = "Oui";
+          paye = "oui";
         }
 
 // 🔸 17. Détecter les numéros de téléphones
@@ -246,7 +259,8 @@ const existingIdsSet = new Set(
       phones,
       emails,
       numeroFacture,
-      suivi,
+      factureEnvoyee,
+      suiviEnvoye,
       eventId
     ]);
 
@@ -279,11 +293,13 @@ sheet.getRange(2, 1, sheet.getLastRow()-1, sheet.getLastColumn())
 genererNumerosFacture();
 
 // 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P1
-sheet.getRange("P1").setValue("Dernière mise à jour : " + now);
+sheet.getRange("P1")
+.setValue("Dernière mise à jour : " + now)
+.setFontWeight("bold ");
 
 // 🔹 Permet de cacher la colonne avec les log google
-if (!sheet.isColumnHiddenByUser(13)) {
-  sheet.hideColumns(13);
+if (!sheet.isColumnHiddenByUser(14)) {
+  sheet.hideColumns(14);
 }
 }
 
@@ -407,6 +423,18 @@ function envoyerFacture() {
   const email = sheet.getRange("J6").getValue(); // adapte selon ta cellule
   const client = sheet.getRange("F4").getValue();
 
+  const sheetRDV = ss.getSheetByName("RDV");
+  const data = sheetRDV.getDataRange().getValues();
+
+  let eventId = null;
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][10] === numeroFacture) { // colonne facture
+      eventId = data[i][13];             // colonne EventID
+      break;
+    }
+  }
+
   if (!email) {
     SpreadsheetApp.getUi().alert("Email manquant");
     return;
@@ -469,6 +497,24 @@ MailApp.sendEmail({
     maps: iconMaps
   }
 });
+  if (eventId) {
+    const event = CalendarApp.getEventById(eventId);
+
+    if (event) {
+      const desc = event.getDescription() || "";
+
+      if (!desc.toLowerCase().includes("facture envoyee")) {
+        event.setDescription(desc + "\nFacture envoyee");
+      }
+    }
+  }
+  // 👉 mettre à jour le sheet aussi
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][10] === numeroFacture) {
+      sheetRDV.getRange(i + 1, 12).setValue("oui"); // colonne Facture Envoyée
+      break;
+    }
+  }
 }
 
 function suiviHypnoJ15() {
@@ -484,11 +530,12 @@ function suiviHypnoJ15() {
     const nom = data[i][1];
     const dateSeance = new Date(data[i][2]);
     const email = data[i][9];
-    const suivi = data[i][12]; // ⚠️ adapte si colonne différente
+    const suivi = data[i][12]; // ✅ bonne colonne
+    const eventId = data[i][13]; // ✅ récupéré ici
 
     if (metier !== "Hypno") continue;
     if (!email) continue;
-    if (suivi === "OUI") continue;
+    if (suivi.toLowerCase() === "oui") continue;
 
     const diffTime = today - dateSeance;
     const diffDays = diffTime / (1000 * 60 * 60 * 24);
@@ -500,6 +547,7 @@ function suiviHypnoJ15() {
     const iconFacebook = DriveApp.getFileById("17KdX9oV8TwQUVC6LgqMyN1lCoFR29XOW").getBlob();
     const iconMaps = DriveApp.getFileById("1_ojXvVn7B97v21prV5WDC4pUqNzMotom").getBlob();
 
+      // 👉 ENVOI MAIL
       MailApp.sendEmail({
   to: email,
   subject: "Comment vous sentez-vous depuis votre séance ?",
@@ -559,8 +607,21 @@ function suiviHypnoJ15() {
   }
 });
 
-      // marquer comme envoyé
-      sheet.getRange(i + 1, 12).setValue("OUI");
+          // 👉 marquer dans sheet
+          sheet.getRange(i + 1, 13).setValue("oui");
+
+          // 👉 mise à jour calendrier
+          if (eventId) {
+          const event = CalendarApp.getEventById(eventId);
+
+          if (event) {
+          const desc = event.getDescription() || "";
+
+          if (!desc.toLowerCase().includes("suivi envoye")) {
+            event.setDescription(desc + "\nSuivi envoye");
+          }
+        }
+      }
     }
   }
 }
