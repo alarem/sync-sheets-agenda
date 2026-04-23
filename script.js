@@ -42,7 +42,7 @@ if (lastRow > 1) {
 let existingIds = [];
 
   if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, 15)
+    sheet.getRange(2, 1, lastRow - 1, 14)
       .clearContent();
   }
 
