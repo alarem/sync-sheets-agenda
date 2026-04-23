@@ -34,24 +34,11 @@ sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
 let lastRow = sheet.getLastRow();
 
-// 🔥 sécurisation (évite range négatif)
-if (lastRow > 1) {
-  sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
+const lastDataRow = sheet.getLastRow();
+
+if (lastDataRow > 1) {
+  sheet.getRange(2, 1, lastDataRow - 1, 14).clearContent();
 }
-
-let existingIds = [];
-
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, 14)
-      .clearContent();
-  }
-
-// 🔥 NORMALISATION (très important)
-
-const existingIdsSet = new Set(
-  existingIds.map(id => id.toString().trim())   //nettoies chaque ID, toString() → au cas où c’est un nombre (sécurité), trim() → enlève les espaces avant/après
-);
-
 
   // 🔹 5. Choisir l'agenda
   const calendars = CalendarApp.getAllCalendars();  //Récupère TOUS les agendas liés à mon compte Google
@@ -81,8 +68,6 @@ const existingIdsSet = new Set(
     // 🔁 éviter doublons dans le script
     if (seenEvents.has(eventId)) return;
     seenEvents.add(eventId);
-    // 🆕 éviter doublons déjà présents dans la feuille
-    if (existingIdsSet.has(eventId)) return;
     
     const title = event.getTitle() || "";           // ex: HYPNO Dupont - Séance
     const description = event.getDescription() || ""; //  || "" évite les crash si déscription vide
@@ -274,7 +259,8 @@ const existingIdsSet = new Set(
 if (rows.length === 0) {
   console.log("Aucun nouvel événement à ajouter");
 } else {
-const startRow = lastRow + 1;
+//const startRow = lastRow + 1;
+const startRow = 2; // TOUJOURS sous les headers
 
 sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
 
@@ -331,12 +317,6 @@ function boutonMobile() {
     sheet.getRange("Q3").setValue(false); // reset
   }
 
-}
-
- // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir d'un lien internet
-function doGet() {
-  importBusinessEvents();
-  return ContentService.createTextOutput("OK");
 }
 
 // 🔹 Permet de générer un numéro de facture
