@@ -11,31 +11,38 @@ function importBusinessEvents() {
     sheet = ss.insertSheet("RDV");
   }
 
-let lastRow = sheet.getLastRow(); //Donne-moi le numéro de la dernière ligne remplie dans la feuille
+// 🔥 toujours garantir les entêtes
+const headers = [
+  "Métier",
+  "Client",
+  "Date",
+  "Mois",
+  "Heure",
+  "Montant",
+  "Payé",                // 07 → index 06
+  "mode Paiement",       // 08 → index 07
+  "N° de téléphones",    // 09 → index 08
+  "Adresse emails",      // 10 → index 09
+  "Numéro de Facture",   // 11 → index 10
+  "Facture Envoyée",     // 12 → index 11
+  "Suivi 15j",           // 13 → index 12
+  "EventID"              // 14 → index 13
+];
 
-if (lastRow === 0) {              //si la feuille est vide
-  sheet.appendRow([               // remplir entête
-    "Métier",
-    "Client",
-    "Date",
-    "Mois",
-    "Heure",
-    "Montant",
-    "Payé",
-    "mode Paiement",       // 08 → index 07
-    "N° de téléphones",    // 09 → index 08
-    "Adresse emails",      // 10 → index 09
-    "Numéro de Facture",   // 11 → index 10
-    "Facture Envoyée",     // 12 → index 11
-    "Suivi 15j",           // 13 → index 12
-    "EventID"              // 14 → index 13
-  ]);
+// 🔥 FORCER les headers à chaque exécution
+sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+let lastRow = sheet.getLastRow();
+
+// 🔥 sécurisation (évite range négatif)
+if (lastRow > 1) {
+  sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
 }
 
 let existingIds = [];
 
   if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn())
+    sheet.getRange(2, 1, lastRow - 1, 15)
       .clearContent();
   }
 
@@ -283,13 +290,13 @@ lastRow += rows.length;
   "dd/MM/yyyy HH:mm"
 );
 
-sheet.getRange(2, 1, sheet.getLastRow()-1, sheet.getLastColumn())
-  .sort([{column: 3, ascending: true}, {column: 5, ascending: true}]);
+const dataRange = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14);
+dataRange.sort([{column: 3, ascending: true}, {column: 5, ascending: true}]);
 
 genererNumerosFacture();
 
-// 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P1
-sheet.getRange("P1")
+// 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P2
+sheet.getRange("P2")
 .setValue("Dernière mise à jour : " + now)
 .setFontWeight("bold ");
 
@@ -317,11 +324,11 @@ function onOpen() {
  // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir de la case à cocher
 function boutonMobile() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
-  const value = sheet.getRange("P4").getValue();
+  const value = sheet.getRange("Q3").getValue();
 
   if (value === true) {
     importBusinessEvents(); // ton script principal
-    sheet.getRange("P4").setValue(false); // reset
+    sheet.getRange("Q3").setValue(false); // reset
   }
 
 }
