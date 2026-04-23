@@ -22,26 +22,22 @@ if (lastRow === 0) {              //si la feuille est vide
     "Heure",
     "Montant",
     "Payé",
-    "mode Paiement",
-    "N° de téléphones",
-    "Adresse emails",
+    "mode Paiement",       // 08 → index 07
+    "N° de téléphones",    // 09 → index 08
+    "Adresse emails",      // 10 → index 09
     "Numéro de Facture",   // 11 → index 10
     "Facture Envoyée",     // 12 → index 11
     "Suivi 15j",           // 13 → index 12
     "EventID"              // 14 → index 13
   ]);
-  lastRow = 1; // 🔥 IMPORTANT, la dernière ligne remplie dans la feuille devient 1
 }
 
 let existingIds = [];
 
-if (lastRow > 1) {      //si données présentes
-  existingIds = sheet
-    .getRange(2, 14, lastRow - 1, 1) //récupère les données
-    .getValues()        //Retourne un tableau 2D
-    .flat()             // Transforme en tableau simple :
-    .filter(String); // 🔥 enlève vides
-}
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn())
+      .clearContent();
+  }
 
 // 🔥 NORMALISATION (très important)
 
@@ -308,8 +304,9 @@ function onOpen() {
   const ui = SpreadsheetApp.getUi();
 
   ui.createMenu("🔄 Sync")
-    .addItem("Actualiser les RDV", "importBusinessEvents")
-    .addToUi();
+  .addItem("Actualiser RDV", "importBusinessEvents")
+  .addItem("Sync Calendar", "updateCalendarFromSheet")
+  .addToUi();
 
   ui.createMenu("📄 Facture")
     .addItem("Générer PDF", "genererPDF")
@@ -497,17 +494,6 @@ MailApp.sendEmail({
     maps: iconMaps
   }
 });
-  if (eventId) {
-    const event = CalendarApp.getEventById(eventId);
-
-    if (event) {
-      const desc = event.getDescription() || "";
-
-      if (!desc.toLowerCase().includes("facture envoyee")) {
-        event.setDescription(desc + "\nFacture envoyee");
-      }
-    }
-  }
   // 👉 mettre à jour le sheet aussi
   for (let i = 1; i < data.length; i++) {
     if (data[i][10] === numeroFacture) {
@@ -515,6 +501,7 @@ MailApp.sendEmail({
       break;
     }
   }
+  updateCalendarFromSheet();
 }
 
 function suiviHypnoJ15() {
@@ -523,6 +510,11 @@ function suiviHypnoJ15() {
   const data = sheet.getDataRange().getValues();
 
   const today = new Date();
+
+  const image = DriveApp.getFileById("1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy").getBlob();
+  const iconInsta = DriveApp.getFileById("17kKuvOmaY76_r63cYsxe7kTiDaf0c4tc").getBlob();
+  const iconFacebook = DriveApp.getFileById("17KdX9oV8TwQUVC6LgqMyN1lCoFR29XOW").getBlob();
+  const iconMaps = DriveApp.getFileById("1_ojXvVn7B97v21prV5WDC4pUqNzMotom").getBlob();
 
   for (let i = 1; i < data.length; i++) {
 
@@ -541,12 +533,6 @@ function suiviHypnoJ15() {
     const diffDays = diffTime / (1000 * 60 * 60 * 24);
 
     if (diffDays >= 15 && diffDays < 16) {
-
-    const image = DriveApp.getFileById("1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy").getBlob();
-    const iconInsta = DriveApp.getFileById("17kKuvOmaY76_r63cYsxe7kTiDaf0c4tc").getBlob();
-    const iconFacebook = DriveApp.getFileById("17KdX9oV8TwQUVC6LgqMyN1lCoFR29XOW").getBlob();
-    const iconMaps = DriveApp.getFileById("1_ojXvVn7B97v21prV5WDC4pUqNzMotom").getBlob();
-
       // 👉 ENVOI MAIL
       MailApp.sendEmail({
   to: email,
@@ -609,19 +595,47 @@ function suiviHypnoJ15() {
 
           // 👉 marquer dans sheet
           sheet.getRange(i + 1, 13).setValue("oui");
+    }
+  }
+  updateCalendarFromSheet();
+}
 
-          // 👉 mise à jour calendrier
-          if (eventId) {
-          const event = CalendarApp.getEventById(eventId);
+function updateCalendarFromSheet() {
 
-          if (event) {
-          const desc = event.getDescription() || "";
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
+  const data = sheet.getDataRange().getValues();
 
-          if (!desc.toLowerCase().includes("suivi envoye")) {
-            event.setDescription(desc + "\nSuivi envoye");
-          }
-        }
-      }
+  for (let i = 1; i < data.length; i++) {
+
+    const eventId = data[i][13];       // EventID
+    const facture = data[i][11];       // Facture envoyée
+    const suivi = data[i][12];         // Suivi 15j
+
+    if (!eventId) continue;
+
+    const event = CalendarApp.getEventById(eventId);
+    if (!event) continue;
+
+    let desc = event.getDescription() || "";
+    const descLower = desc.toLowerCase();
+
+    let updated = false;
+
+    // 🔹 FACTURE
+    if (facture === "oui" && !descLower.includes("facture envoyee")) {
+      desc += "\nFacture envoyee";
+      updated = true;
+    }
+
+    // 🔹 SUIVI
+    if (suivi === "oui" && !descLower.includes("suivi envoye")) {
+      desc += "\nSuivi envoye";
+      updated = true;
+    }
+
+    // 🔥 écrire seulement si changement
+    if (updated) {
+      event.setDescription(desc);
     }
   }
 }
