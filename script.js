@@ -310,13 +310,21 @@ function onOpen() {
  // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir de la case à cocher
 function boutonMobile() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
-  const value = sheet.getRange("S3").getValue();
 
-  if (value === true) {
-    importBusinessEvents(); // ton script principal
-    sheet.getRange("S3").setValue(false); // reset
-  }
+  const actions = [
+    { cell: "S3", func: importBusinessEvents },
+    { cell: "S5", func: genererPDF },
+    { cell: "S6", func: envoyerFacture }
+  ];
 
+  actions.forEach(action => {
+    const value = sheet.getRange(action.cell).getValue();
+
+    if (value === true) {
+      action.func(); // lance la fonction
+      sheet.getRange(action.cell).setValue(false); // reset checkbox
+    }
+  });
 }
 
 // 🔹 Permet de générer un numéro de facture
