@@ -282,7 +282,7 @@ genererNumerosFacture();
 // 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P2
 sheet.getRange("P2")
 .setValue("Dernière mise à jour : " + now)
-.setFontWeight("bold ");
+.setFontWeight("bold");
 
 // 🔹 Permet de cacher la colonne avec les log google
 if (!sheet.isColumnHiddenByUser(14)) {
