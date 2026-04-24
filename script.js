@@ -310,11 +310,11 @@ function onOpen() {
  // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir de la case à cocher
 function boutonMobile() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
-  const value = sheet.getRange("Q3").getValue();
+  const value = sheet.getRange("S3").getValue();
 
   if (value === true) {
     importBusinessEvents(); // ton script principal
-    sheet.getRange("Q3").setValue(false); // reset
+    sheet.getRange("S3").setValue(false); // reset
   }
 
 }
@@ -623,6 +623,45 @@ function updateCalendarFromSheet() {
     // 🔥 écrire seulement si changement
     if (updated) {
       event.setDescription(desc);
+    }
+  }
+
+}
+function remplirFacture() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetFacture = ss.getSheetByName("Facture");
+  const sheetRDV = ss.getSheetByName("RDV");
+
+  const numero = sheetRDV.getRange("T4").getValue();
+  if (!numero) return;
+
+  const data = sheetRDV.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][10] === numero) {
+
+      sheetFacture.getRange("F4").setValue(data[i][1]); // Client
+      sheetFacture.getRange("F5").setValue(data[i][2]); // Date
+      sheetFacture.getRange("F6").setValue(data[i][10]); // Numéro de facture
+      sheetFacture.getRange("E19").setValue(data[i][5]); // Montant
+      sheetFacture.getRange("F25").setValue(data[i][7]); // type de paiment
+      sheetFacture.getRange("J6").setValue(data[i][9]); // Email
+
+      return;
+    }
+  }
+
+  SpreadsheetApp.getUi().alert("Facture introuvable");
+}
+
+function onEdit(e) {
+  const sheet = e.source.getActiveSheet();
+
+  if (sheet.getName() === "RDV") {
+
+    if (e.range.getA1Notation() === "S4" && e.value === "TRUE") {
+      remplirFacture();
+      sheet.getRange("S4").setValue(false);
     }
   }
 }
