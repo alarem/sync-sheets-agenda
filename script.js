@@ -179,24 +179,10 @@ if (lastDataRow > 1) {
     );
 
     // 🔸 14. Extraire le montant depuis la description
-    let montant = 0;    //montant 
-
-    // 🔹 détecter € OU "euros"
-    const matches = description.match(/(\d+(?:[.,]\d+)?)\s*(€|eur|euros?)/gi);
-
-    if (matches) {
-      matches.forEach(m => {
-        const value = m.match(/(\d+(?:[.,]\d+)?)/);
-        if (value) {
-          montant += parseFloat(value[1].replace(",", "."));
-        }
-      });
-    }
+    let montant = extractMontant(description);
 
     // 🔸 15. Détecter le mode de paiement
     let modePaiement = "";
-
-
 
     if (/\bespeces?\b/.test(desc)) {
       modePaiement = "Espèces";
@@ -321,7 +307,7 @@ function onOpen() {
 
  // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir de la case à cocher
 function boutonMobile() {
-  const sheet = getSS().getSheetByName(CONFIG.SHEET_RDV);
+  const sheet = getSheet(CONFIG.SHEET_RDV);
 
   const actions = [
     { cell: "S3", func: importBusinessEvents },
@@ -345,7 +331,7 @@ function boutonMobile() {
 
 // 🔹 Permet de générer un numéro de facture
 function genererNumerosFacture() {
-  const sheet = getSS().getSheetByName(CONFIG.SHEET_RDV);
+  const sheet = getSheet(CONFIG.SHEET_RDV);
   const data = sheet.getRange(2, 1, sheet.getLastRow()-1, 12).getValues();
 
   let compteur = 1;
@@ -502,7 +488,7 @@ MailApp.sendEmail({
 
 function suiviHypnoJ15() {
 
-  const sheet = getSS().getSheetByName(CONFIG.SHEET_RDV);
+  const sheet = getSheet(CONFIG.SHEET_RDV);
   const data = sheet.getDataRange().getValues();
 
   const today = new Date();
@@ -574,7 +560,7 @@ function suiviHypnoJ15() {
 
 function updateCalendarFromSheet() {
 
-  const sheet = getSS().getSheetByName(CONFIG.SHEET_RDV);
+  const sheet = getSheet(CONFIG.SHEET_RDV);
   const data = sheet.getDataRange().getValues();
 
   for (let i = 1; i < data.length; i++) {
@@ -674,6 +660,20 @@ function getSignatureHtml() {
   `;
 }
 
+function getSheet(name) {
+  return getSS().getSheetByName(name);
+}
+
 function getSS() {
   return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function extractMontant(description) {
+  const matches = description.match(/(\d+(?:[.,]\d+)?)\s*(€|eur|euros?)/gi);
+  if (!matches) return 0;
+
+  return matches.reduce((sum, m) => {
+    const value = m.match(/(\d+(?:[.,]\d+)?)/);
+    return sum + (value ? parseFloat(value[1].replace(",", ".")) : 0);
+  }, 0);
 }
