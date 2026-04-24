@@ -1,14 +1,28 @@
+// à faire pour plus tard: detection tutoiement/vouvoiement ; revoir les numéro de facture ; ect
+
+const CONFIG = {
+  SHEET_RDV: "RDV",
+  SHEET_FACTURE: "Facture",
+  DRIVE: {
+    FACTURES_FOLDER: "1SLFLRLfLy-AiRPNDleOCBz5nbEDF54dX",
+    SIGNATURE: "1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy",
+    INSTA: "17kKuvOmaY76_r63cYsxe7kTiDaf0c4tc",
+    FACEBOOK: "17KdX9oV8TwQUVC6LgqMyN1lCoFR29XOW",
+    MAPS: "1_ojXvVn7B97v21prV5WDC4pUqNzMotom"
+  }
+};
+
 //fonction principale
 function importBusinessEvents() {
 
   // 🔹 1. Récupérer le fichier Google Sheets actif
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSS();
   
   // 🔹 2. Récupérer la feuille "RDV" 
-  let sheet = ss.getSheetByName("RDV");
+  let sheet = ss.getSheetByName(CONFIG.SHEET_RDV);
   //si elle n'existe pas la créer
   if (!sheet) {  
-    sheet = ss.insertSheet("RDV");
+    sheet = ss.insertSheet(CONFIG.SHEET_RDV);
   }
 
 // 🔥 toujours garantir les entêtes
@@ -78,8 +92,8 @@ if (lastDataRow > 1) {
     
     // 🔸 détecter statut facture / suivi
 
-    let factureEnvoyee = "Non";
-    let suiviEnvoye = "Non";
+    let factureEnvoyee = "non";
+    let suiviEnvoye = "non";
 
     if (desc.includes("facture envoyee")) {
       factureEnvoyee = "oui";
@@ -198,7 +212,7 @@ if (lastDataRow > 1) {
     }
 
     // 🔸 16. Extraire le statut payé
-    let paye = "Non";
+    let paye = "non";
 
     // 🔥 détecte payé / payée / payés / payées MAIS PAS "heures payées"
     if (
@@ -231,8 +245,6 @@ if (lastDataRow > 1) {
     if (matchFacture) {
       numeroFacture = matchFacture[0].toUpperCase();
     }
-
-    let suivi = "";
 
     // 🔸 20. Ajouter au tableau (🚀 plus rapide que appendRow)
     rows.push([
@@ -309,7 +321,7 @@ function onOpen() {
 
  // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir de la case à cocher
 function boutonMobile() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
+  const sheet = getSS().getSheetByName(CONFIG.SHEET_RDV);
 
   const actions = [
     { cell: "S3", func: importBusinessEvents },
@@ -318,18 +330,22 @@ function boutonMobile() {
   ];
 
   actions.forEach(action => {
-    const value = sheet.getRange(action.cell).getValue();
+    try {
+      const value = sheet.getRange(action.cell).getValue();
 
-    if (value === true) {
-      action.func(); // lance la fonction
-      sheet.getRange(action.cell).setValue(false); // reset checkbox
+      if (value === true) {
+        action.func();
+        sheet.getRange(action.cell).setValue(false);
+      }
+    } catch (error) {
+      Logger.log(`Erreur ${action.cell}: ${error}`);
     }
   });
 }
 
 // 🔹 Permet de générer un numéro de facture
 function genererNumerosFacture() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
+  const sheet = getSS().getSheetByName(CONFIG.SHEET_RDV);
   const data = sheet.getRange(2, 1, sheet.getLastRow()-1, 12).getValues();
 
   let compteur = 1;
@@ -364,8 +380,8 @@ function genererNumerosFacture() {
 function genererPDF() {
   remplirFacture(); // 🔥 sécurise les données
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("Facture");
+  const ss = getSS();
+  const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
 
   const numeroFacture = sheet.getRange("F6").getValue();
 
@@ -373,11 +389,12 @@ function genererPDF() {
     SpreadsheetApp.getUi().alert("Numéro de facture manquant");
     return;
   }
-  const folder = DriveApp.getFolderById("1SLFLRLfLy-AiRPNDleOCBz5nbEDF54dX"); 
+  const folder = DriveApp.getFolderById(CONFIG.DRIVE.FACTURES_FOLDER); 
   // 🔍 Vérifier si fichier existe déjà
   const files = folder.getFilesByName(numeroFacture + ".pdf");
 
   if (files.hasNext()) {
+    Logger.log("PDF déjà existant");
     return files.next().getBlob(); // 👉 on retourne l'existant
   }
 
@@ -411,14 +428,14 @@ function genererPDF() {
 
 function envoyerFacture() {
   remplirFacture(); // 🔥 garantit que tout est à jour
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("Facture");
+  const ss = getSS();
+  const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
 
   const numeroFacture = sheet.getRange("F6").getValue();
   const email = sheet.getRange("J6").getValue(); // adapte selon ta cellule
   const client = sheet.getRange("F4").getValue();
 
-  const sheetRDV = ss.getSheetByName("RDV");
+  const sheetRDV = ss.getSheetByName(CONFIG.SHEET_RDV);
   const data = sheetRDV.getDataRange().getValues();
 
   let eventId = null;
@@ -436,10 +453,15 @@ function envoyerFacture() {
   }
 
   const pdf = genererPDF();
-  const image = DriveApp.getFileById("1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy").getBlob();
-  const iconInsta = DriveApp.getFileById("17kKuvOmaY76_r63cYsxe7kTiDaf0c4tc").getBlob();
-  const iconFacebook = DriveApp.getFileById("17KdX9oV8TwQUVC6LgqMyN1lCoFR29XOW").getBlob();
-  const iconMaps = DriveApp.getFileById("1_ojXvVn7B97v21prV5WDC4pUqNzMotom").getBlob();
+
+  if (!pdf) {
+  SpreadsheetApp.getUi().alert("Erreur génération PDF");
+  return;
+}
+  const image = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE).getBlob();
+  const iconInsta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
+  const iconFacebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
+  const iconMaps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
 
 MailApp.sendEmail({
   to: email,
@@ -457,31 +479,7 @@ MailApp.sendEmail({
     <p>Cordialement<br>
     Sandy ROYET</p>
 
-    <br>
-
-    <img src="cid:signature" style="width:200px; height:auto;"><br><br>
-
-<table>
-  <tr>
-    <td>
-      <a href="https://www.instagram.com/sandy_hypno/">
-        <img src="cid:insta" width="30">
-      </a>
-    </td>
-    <td width="10"></td> <!-- espace -->
-    <td>
-      <a href="https://www.facebook.com/share/1aLWmSqeii/">
-        <img src="cid:facebook" width="30">
-      </a>
-    </td>
-    <td width="10"></td>
-    <td>
-      <a href="https://maps.app.goo.gl/ZbCGRXKUntZTxT1F6">
-        <img src="cid:maps" width="30">
-      </a>
-    </td>
-  </tr>
-</table> 
+  ${getSignatureHtml()}
   `,
 
   attachments: [pdf],
@@ -504,15 +502,15 @@ MailApp.sendEmail({
 
 function suiviHypnoJ15() {
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
+  const sheet = getSS().getSheetByName(CONFIG.SHEET_RDV);
   const data = sheet.getDataRange().getValues();
 
   const today = new Date();
 
-  const image = DriveApp.getFileById("1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy").getBlob();
-  const iconInsta = DriveApp.getFileById("17kKuvOmaY76_r63cYsxe7kTiDaf0c4tc").getBlob();
-  const iconFacebook = DriveApp.getFileById("17KdX9oV8TwQUVC6LgqMyN1lCoFR29XOW").getBlob();
-  const iconMaps = DriveApp.getFileById("1_ojXvVn7B97v21prV5WDC4pUqNzMotom").getBlob();
+  const image = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE).getBlob();
+  const iconInsta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
+  const iconFacebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
+  const iconMaps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
 
   for (let i = 1; i < data.length; i++) {
 
@@ -525,7 +523,7 @@ function suiviHypnoJ15() {
 
     if (metier !== "Hypno") continue;
     if (!email) continue;
-    if (suivi.toLowerCase() === "oui") continue;
+    if ((suivi || "").toLowerCase() === "oui") continue;
 
     const diffTime = today - dateSeance;
     const diffDays = diffTime / (1000 * 60 * 60 * 24);
@@ -556,31 +554,7 @@ function suiviHypnoJ15() {
 
     <p>Sandy ROYET</p>
 
-    <br>
-
-    <img src="cid:signature" style="width:200px; height:auto;"><br><br>
-
-    <table>
-      <tr>
-        <td>
-          <a href="https://www.instagram.com/sandy_hypno/">
-            <img src="cid:insta" width="30">
-          </a>
-        </td>
-        <td width="10"></td>
-        <td>
-          <a href="https://www.facebook.com/share/1aLWmSqeii/">
-            <img src="cid:facebook" width="30">
-          </a>
-        </td>
-        <td width="10"></td>
-        <td>
-          <a href="https://maps.app.goo.gl/ZbCGRXKUntZTxT1F6">
-            <img src="cid:maps" width="30">
-          </a>
-        </td>
-      </tr>
-    </table>
+  ${getSignatureHtml()}
   `,
 
   inlineImages: {
@@ -600,7 +574,7 @@ function suiviHypnoJ15() {
 
 function updateCalendarFromSheet() {
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RDV");
+  const sheet = getSS().getSheetByName(CONFIG.SHEET_RDV);
   const data = sheet.getDataRange().getValues();
 
   for (let i = 1; i < data.length; i++) {
@@ -639,9 +613,9 @@ function updateCalendarFromSheet() {
 
 }
 function remplirFacture() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheetFacture = ss.getSheetByName("Facture");
-  const sheetRDV = ss.getSheetByName("RDV");
+  const ss = getSS();
+  const sheetFacture = ss.getSheetByName(CONFIG.SHEET_FACTURE);
+  const sheetRDV = ss.getSheetByName(CONFIG.SHEET_RDV);
 
   const numero = sheetRDV.getRange("T4").getValue();
   if (!numero) return;
@@ -668,11 +642,38 @@ function remplirFacture() {
 function onEdit(e) {
   const sheet = e.source.getActiveSheet();
 
-  if (sheet.getName() === "RDV") {
+  if (sheet.getName() === CONFIG.SHEET_RDV) {
 
     // 🔹 Si tu changes le numéro → auto
     if (e.range.getA1Notation() === "T4") {
       remplirFacture();
     }
   }
+}
+
+function getSignatureHtml() {
+  return `
+    <br>
+    <img src="cid:signature" style="width:200px; height:auto;"><br><br>
+
+    <table>
+      <tr>
+        <td><a href="https://www.instagram.com/sandy_hypno/">
+          <img src="cid:insta" width="30">
+        </a></td>
+        <td width="10"></td>
+        <td><a href="https://www.facebook.com/share/1aLWmSqeii/">
+          <img src="cid:facebook" width="30">
+        </a></td>
+        <td width="10"></td>
+        <td><a href="https://maps.app.goo.gl/ZbCGRXKUntZTxT1F6">
+          <img src="cid:maps" width="30">
+        </a></td>
+      </tr>
+    </table>
+  `;
+}
+
+function getSS() {
+  return SpreadsheetApp.getActiveSpreadsheet();
 }
