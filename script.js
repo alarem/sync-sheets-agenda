@@ -313,8 +313,8 @@ function boutonMobile() {
 
   const actions = [
     { cell: "S3", func: importBusinessEvents },
-    { cell: "S5", func: genererPDF },
-    { cell: "S6", func: envoyerFacture }
+    { cell: "S4", func: genererPDF },
+    { cell: "S5", func: envoyerFacture }
   ];
 
   actions.forEach(action => {
@@ -362,6 +362,8 @@ function genererNumerosFacture() {
 
 // 🔹 Permet de générer une facture en PDF et de l'enregistrer dans le drive
 function genererPDF() {
+  remplirFacture(); // 🔥 sécurise les données
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("Facture");
 
@@ -408,6 +410,7 @@ function genererPDF() {
 }
 
 function envoyerFacture() {
+  remplirFacture(); // 🔥 garantit que tout est à jour
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("Facture");
 
@@ -667,9 +670,9 @@ function onEdit(e) {
 
   if (sheet.getName() === "RDV") {
 
-    if (e.range.getA1Notation() === "S4" && e.value === "TRUE") {
+    // 🔹 Si tu changes le numéro → auto
+    if (e.range.getA1Notation() === "T4") {
       remplirFacture();
-      sheet.getRange("S4").setValue(false);
     }
   }
 }
