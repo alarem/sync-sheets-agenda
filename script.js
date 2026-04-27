@@ -77,7 +77,7 @@ if (lastDataRow > 1) {
 
   // 🔹 8. Parcourir chaque événement
   events.forEach(event => {
-
+    try {
     const eventId = event.getId().toString().trim(); //récupères l’identifiant unique de l’événement,assure format texte, nettoie
     // 🔁 éviter doublons dans le script
     if (seenEvents.has(eventId)) return;
@@ -131,12 +131,12 @@ if (lastDataRow > 1) {
         }
       }
 
-  // 🔸 cas classique
-  if (metiers[key].some(keyword => lowerTitle.startsWith(keyword))) {
-    metier = key;
-    break;
-  }
-}
+      // 🔸 cas classique
+      if (metiers[key].some(keyword => lowerTitle.startsWith(keyword))) {
+        metier = key;
+        break;
+      }
+    }
     if (!metier) return;   
 
     // 🔸 10. Nettoyer le titre (enlever [HYPNO] etc.)
@@ -208,7 +208,7 @@ if (lastDataRow > 1) {
           paye = "oui";
         }
 
-// 🔸 17. Détecter les numéros de téléphones
+    // 🔸 17. Détecter les numéros de téléphones
     
     const phonesRaw = description.match(/\b(?:\+33|0)[1-9](?:[\s.-]?\d{2}){4}\b/g) || [];
 
@@ -216,12 +216,12 @@ if (lastDataRow > 1) {
       p.replace(/\s|\./g, "").replace(/^0/, "+33")
     ).join(", ");
 
-// 🔸 18. Détecter les numéros adresse mails
+    // 🔸 18. Détecter les numéros adresse mails
     const emails = (description.match(
     /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
     ) || []).join(", ");
 
-// 🔸 19. créer le numéro de facture à partir de la date et de l'heure
+    // 🔸 19. créer le numéro de facture à partir de la date et de l'heure
 
     let numeroFacture = "";
 
@@ -250,6 +250,9 @@ if (lastDataRow > 1) {
       eventId
     ]);
 
+    } catch (err) {
+      console.log("Erreur event: " + err + " | ID: " + event.getId());
+    }
   });
   
 
@@ -336,30 +339,31 @@ function genererNumerosFacture() {
 
   let compteur = 1;
 
+  const updates = []; // 🔥 tableau pour stocker les résultats
+
   for (let i = 0; i < data.length; i++) {
 
-    const metier = data[i][0];   // colonne Métier
-    const date = data[i][2];     // colonne Date
-    const numeroExistant = data[i][10]; // colonne facture
-    let numeroFacture = "";
-    
-    // 🔒 SI déjà un numéro → on ne touche pas
-    if (numeroExistant) continue;
+    const metier = data[i][0];
+    const date = data[i][2];
+    const numeroExistant = data[i][10];
 
-    if (metier === "Hypno"&& date) {
+    let numeroFacture = numeroExistant; // ⚠️ important
+
+    // 🔒 SI déjà un numéro → on garde
+    if (!numeroExistant && metier === "Hypno" && date) {
 
       const year = new Date(date).getFullYear();
-
       const numero = String(compteur).padStart(3, "0");
 
       numeroFacture = `HYP-${year}-${numero}`;
-
       compteur++;
     }
 
-    // écrire en colonne 11 (Numéro de facture)
-    sheet.getRange(i + 2, 11).setValue(numeroFacture);
+    updates.push([numeroFacture]); // 🔥 on stocke
   }
+
+  // 🔥 UNE SEULE écriture
+  sheet.getRange(2, 11, updates.length, 1).setValues(updates);
 }
 
 // 🔹 Permet de générer une facture en PDF et de l'enregistrer dans le drive
