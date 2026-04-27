@@ -308,6 +308,10 @@ function onOpen() {
     .addItem("Générer PDF", "genererPDF")
     .addItem("Envoyer facture", "envoyerFacture")
     .addToUi();
+    
+  ui.createMenu("👤 Contacts")
+  .addItem("Sync Contacts", "syncContactsToSheet")
+  .addToUi();
 }
 
  // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir de la case à cocher
@@ -682,4 +686,72 @@ function extractMontant(description) {
     const value = m.match(/(\d+(?:[.,]\d+)?)/);
     return sum + (value ? parseFloat(value[1].replace(",", ".")) : 0);
   }, 0);
+}
+
+function syncContactsToSheet() {
+
+  const ss = getSS();
+  let sheet = ss.getSheetByName("Carnet");
+
+  if (!sheet) {
+    sheet = ss.insertSheet("Carnet");
+  }
+
+  const headers = ["Nom", "Prénom", "Téléphone", "Email"];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, 4).clearContent();
+  }
+
+  const connections = People.People.Connections.list('people/me', {
+    pageSize: 1000,
+    personFields: 'names,emailAddresses,phoneNumbers'
+  });
+
+  const rows = [];
+
+  (connections.connections || []).forEach(person => {
+    try {
+
+      const names = person.names ? person.names[0] : {};
+      const firstName = names.givenName || "";
+      const lastName = names.familyName || "";
+
+      const phones = (person.phoneNumbers || [])
+      .map(p => {
+        if (!p.value) return "";
+
+        return p.value
+          .replace(/\s|\./g, "")
+          .replace(/^0/, "+33")
+          .replace(/-/g, ""); // bonus : enlève tirets
+      })
+      .filter(p => p) // supprime les vides
+      .join(", ");
+
+      const emails = (person.emailAddresses || [])
+        .map(e => e.value)
+        .join(", ");
+
+      if (!firstName && !lastName && !phones && !emails) return;
+
+      rows.push([
+        lastName,
+        firstName,
+        phones,
+        emails
+      ]);
+
+    } catch (err) {
+      console.log("Erreur contact: " + err);
+    }
+  });
+
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, 4).setValues(rows);
+  }
+
+  console.log("Contacts importés : " + rows.length);
 }
