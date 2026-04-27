@@ -48,10 +48,8 @@ sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
 let lastRow = sheet.getLastRow();
 
-const lastDataRow = sheet.getLastRow();
-
-if (lastDataRow > 1) {
-  sheet.getRange(2, 1, lastDataRow - 1, 14).clearContent();
+if (lastRow > 1) {
+  sheet.getRange(2, 1, lastRow - 1, 14).clearContent();
 }
 
   // 🔹 5. Choisir l'agenda
@@ -277,8 +275,12 @@ lastRow += rows.length;
   "dd/MM/yyyy HH:mm"
 );
 
-const dataRange = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14);
-dataRange.sort([{column: 3, ascending: true}, {column: 5, ascending: true}]);
+if (rows.length > 0) {
+  const finalLastRow = rows.length + 1;
+
+  const dataRange = sheet.getRange(2, 1, finalLastRow - 1, 14);
+  dataRange.sort([{column: 3, ascending: true}, {column: 5, ascending: true}]);
+}
 
 genererNumerosFacture();
 
