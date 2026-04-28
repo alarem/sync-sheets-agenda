@@ -1,5 +1,3 @@
-// à faire pour plus tard: detection tutoiement/vouvoiement ; revoir les numéro de facture ; ect
-
 const CONFIG = {
   SHEET_RDV: "RDV",
   SHEET_FACTURE: "Facture",
@@ -11,7 +9,9 @@ const CONFIG = {
     MAPS: "1_ojXvVn7B97v21prV5WDC4pUqNzMotom"
   }
 };
+
 let DRIVE_READY = false;
+let PDF_CACHE = {};
 const DRIVE_CACHE = {
   signature: null,
   insta: null,
@@ -32,32 +32,32 @@ function importBusinessEvents() {
     sheet = ss.insertSheet(CONFIG.SHEET_RDV);
   }
 
-// 🔥 toujours garantir les entêtes
-const headers = [
-  "Métier",
-  "Client",
-  "Date",
-  "Mois",
-  "Heure",
-  "Montant",
-  "Payé",                // 07 → index 06
-  "mode Paiement",       // 08 → index 07
-  "N° de téléphones",    // 09 → index 08
-  "Adresse emails",      // 10 → index 09
-  "Numéro de Facture",   // 11 → index 10
-  "Facture Envoyée",     // 12 → index 11
-  "Suivi 15j",           // 13 → index 12
-  "EventID"              // 14 → index 13
-];
+  // 🔥 toujours garantir les entêtes
+  const headers = [
+    "Métier",
+    "Client",
+    "Date",
+    "Mois",
+    "Heure",
+    "Montant",
+    "Payé",                // 07 → index 06
+    "mode Paiement",       // 08 → index 07
+    "N° de téléphones",    // 09 → index 08
+    "Adresse emails",      // 10 → index 09
+    "Numéro de Facture",   // 11 → index 10
+    "Facture Envoyée",     // 12 → index 11
+    "Suivi 15j",           // 13 → index 12
+    "EventID"              // 14 → index 13
+  ];
 
-// 🔥 FORCER les headers à chaque exécution
-sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  // 🔥 FORCER les headers à chaque exécution
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
-let lastRow = sheet.getLastRow();
+  let lastRow = sheet.getLastRow();
 
-if (lastRow > 1) {
-  sheet.getRange(2, 1, lastRow - 1, 14).clearContent();
-}
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, 14).clearContent();
+  }
 
   // 🔹 5. Choisir l'agenda
   const calendars = CalendarApp.getAllCalendars();  //Récupère TOUS les agendas liés à mon compte Google
@@ -262,17 +262,17 @@ if (lastRow > 1) {
   
 
   // 🔹 19. Écriture en une seule fois (🚀 GROS gain de performance)
-if (rows.length === 0) {
-  console.log("Aucun nouvel événement à ajouter");
-} else {
-//const startRow = lastRow + 1;
-const startRow = 2; // TOUJOURS sous les headers
+  if (rows.length === 0) {
+    console.log("Aucun nouvel événement à ajouter");
+  } else {
+  //const startRow = lastRow + 1;
+  const startRow = 2; // TOUJOURS sous les headers
 
-sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+  sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
 
-// 🔥 Mise à jour de lastRow
-lastRow += rows.length;
-}
+  // 🔥 Mise à jour de lastRow
+  lastRow += rows.length;
+  }
 
   console.log("Import terminé !");
 
@@ -280,26 +280,26 @@ lastRow += rows.length;
   new Date(),
   Session.getScriptTimeZone(),
   "dd/MM/yyyy HH:mm"
-);
+  );
 
-if (rows.length > 0) {
-  const finalLastRow = rows.length + 1;
+  if (rows.length > 0) {
+    const finalLastRow = rows.length + 1;
 
-  const dataRange = sheet.getRange(2, 1, finalLastRow - 1, 14);
-  dataRange.sort([{column: 3, ascending: true}, {column: 5, ascending: true}]);
-}
+    const dataRange = sheet.getRange(2, 1, finalLastRow - 1, 14);
+    dataRange.sort([{column: 3, ascending: true}, {column: 5, ascending: true}]);
+  }
 
-genererNumerosFacture();
+  genererNumerosFacture();
 
-// 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P2
-sheet.getRange("P2")
-.setValue("Dernière mise à jour : " + now)
-.setFontWeight("bold");
+  // 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P2
+  sheet.getRange("P2")
+  .setValue("Dernière mise à jour : " + now)
+  .setFontWeight("bold");
 
-// 🔹 Permet de cacher la colonne avec les log google
-if (!sheet.isColumnHiddenByUser(14)) {
-  sheet.hideColumns(14);
-}
+  // 🔹 Permet de cacher la colonne avec les log google
+  if (!sheet.isColumnHiddenByUser(14)) {
+    sheet.hideColumns(14);
+  }
 }
 
 // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir d'un bouton dans le bandeau en haut
@@ -385,8 +385,11 @@ function genererPDF() {
 
   const ss = getSS();
   const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
-
   const numeroFacture = sheet.getRange("F6").getValue();
+
+  if (PDF_CACHE[numeroFacture]) {
+    return PDF_CACHE[numeroFacture];
+  }
 
   if (!numeroFacture) {
     SpreadsheetApp.getUi().alert("Numéro de facture manquant");
@@ -425,12 +428,14 @@ function genererPDF() {
 
   // 📁 Sauvegarde dans Drive
   folder.createFile(blob);
+  
+  PDF_CACHE[numeroFacture] = blob;
 
   return blob;
 }
 
 function envoyerFacture() {
-  loadDriveAssets();
+  initApp();
   remplirFacture(); // 🔥 garantit que tout est à jour
   const ss = getSS();
   const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
@@ -499,7 +504,7 @@ function envoyerFacture() {
 
 function suiviHypnoJ15() {
 
-  loadDriveAssets();
+  initApp();
   const sheet = getSheet(CONFIG.SHEET_RDV);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
@@ -673,12 +678,27 @@ function getSS() {
 function loadDriveAssets() {
   if (DRIVE_READY) return;
 
-  DRIVE_CACHE.signature = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE).getBlob();
-  DRIVE_CACHE.insta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
-  DRIVE_CACHE.facebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
-  DRIVE_CACHE.maps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
+  try {
+    DRIVE_CACHE.signature = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE).getBlob();
+    DRIVE_CACHE.insta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
+    DRIVE_CACHE.facebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
+    DRIVE_CACHE.maps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
 
-  DRIVE_READY = true;
+    DRIVE_READY = true;
+
+  } catch (err) {
+    Logger.log("Erreur Drive (retry): " + err);
+
+    Utilities.sleep(1000); // ⏳ pause 1 seconde
+
+    // 🔁 retry 1 fois
+    DRIVE_CACHE.signature = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE).getBlob();
+    DRIVE_CACHE.insta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
+    DRIVE_CACHE.facebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
+    DRIVE_CACHE.maps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
+
+    DRIVE_READY = true;
+  }
 }
 
 function extractMontant(description) {
@@ -814,7 +834,7 @@ function generateEmailContent(email, clientFallback, contactsMap) {
 function getContactsMap() {
   const sheet = getSheet("Carnet");
   const lastRow = sheet.getLastRow();
-const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
 
   const map = {};
 
@@ -863,4 +883,7 @@ function generateSuiviContent(email, nom, contactsMap) {
 function testDrive() {
   const file = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE);
   Logger.log(file.getName());
+}
+function initApp() {
+  loadDriveAssets();
 }
