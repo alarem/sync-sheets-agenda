@@ -11,6 +11,13 @@ const CONFIG = {
     MAPS: "1_ojXvVn7B97v21prV5WDC4pUqNzMotom"
   }
 };
+let DRIVE_READY = false;
+const DRIVE_CACHE = {
+  signature: null,
+  insta: null,
+  facebook: null,
+  maps: null
+};
 
 //fonction principale
 function importBusinessEvents() {
@@ -423,20 +430,22 @@ function genererPDF() {
 }
 
 function envoyerFacture() {
+  loadDriveAssets();
   remplirFacture(); // 🔥 garantit que tout est à jour
   const ss = getSS();
   const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
-
+  const contactsMap = getContactsMap();
   const numeroFacture = sheet.getRange("F6").getValue();
   const email = sheet.getRange("J6").getValue(); // adapte selon ta cellule
   const client = sheet.getRange("F4").getValue();
 
   const sheetRDV = ss.getSheetByName(CONFIG.SHEET_RDV);
-  const data = sheetRDV.getDataRange().getValues();
+  const lastRow = sheetRDV.getLastRow();
+  const data = sheetRDV.getRange(2, 1, lastRow - 1, 14).getValues();
 
   let eventId = null;
 
-  for (let i = 1; i < data.length; i++) {
+  for (let i = 0; i < data.length; i++) {
     if (data[i][10] === numeroFacture) { // colonne facture
       eventId = data[i][13];             // colonne EventID
       break;
@@ -453,41 +462,35 @@ function envoyerFacture() {
   if (!pdf) {
   SpreadsheetApp.getUi().alert("Erreur génération PDF");
   return;
-}
-  const image = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE).getBlob();
-  const iconInsta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
-  const iconFacebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
-  const iconMaps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
-  const message = generateEmailContent(email, client);
-
-MailApp.sendEmail({
-  to: email,
-  subject: "Facture " + numeroFacture,
-
-  htmlBody: `
-    ${message}
-
-
-    <br>
-
-    <p>Cordialement<br>
-    Sandy ROYET</p>
-
-  ${getSignatureHtml()}
-  `,
-
-  attachments: [pdf],
-  inlineImages: {
-    signature: image,
-    insta: iconInsta,
-    facebook: iconFacebook,
-    maps: iconMaps
   }
-});
+  
+  const image = DRIVE_CACHE.signature;
+  const iconInsta = DRIVE_CACHE.insta;
+  const iconFacebook = DRIVE_CACHE.facebook;
+  const iconMaps = DRIVE_CACHE.maps;
+  const message = generateEmailContent(email, client, contactsMap);
+
+  MailApp.sendEmail({
+    to: email,
+    subject: "Facture " + numeroFacture,
+
+    htmlBody: `
+      ${message}
+      ${getSignatureHtml()}
+    `,
+
+    attachments: [pdf],
+    inlineImages: {
+      signature: image,
+      insta: iconInsta,
+      facebook: iconFacebook,
+      maps: iconMaps
+    }
+  });
   // 👉 mettre à jour le sheet aussi
-  for (let i = 1; i < data.length; i++) {
+  for (let i = 0; i < data.length; i++) {
     if (data[i][10] === numeroFacture) {
-      sheetRDV.getRange(i + 1, 12).setValue("oui"); // colonne Facture Envoyée
+      sheetRDV.getRange(i + 2, 12).setValue("oui"); // colonne Facture Envoyée
       break;
     }
   }
@@ -496,86 +499,80 @@ MailApp.sendEmail({
 
 function suiviHypnoJ15() {
 
+  loadDriveAssets();
   const sheet = getSheet(CONFIG.SHEET_RDV);
-  const data = sheet.getDataRange().getValues();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
 
+  const data = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
   const today = new Date();
+  const contactsMap = getContactsMap();
+  const updates = [];
+  const image = DRIVE_CACHE.signature;
+  const iconInsta = DRIVE_CACHE.insta;
+  const iconFacebook = DRIVE_CACHE.facebook;
+  const iconMaps = DRIVE_CACHE.maps;
 
-  const image = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE).getBlob();
-  const iconInsta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
-  const iconFacebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
-  const iconMaps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
-
-  for (let i = 1; i < data.length; i++) {
+  for (let i = 0; i < data.length; i++) {
 
     const metier = data[i][0];
     const nom = data[i][1];
     const dateSeance = new Date(data[i][2]);
     const email = data[i][9];
-    const suivi = data[i][12]; // ✅ bonne colonne
-    const eventId = data[i][13]; // ✅ récupéré ici
+    const suivi = data[i][12];
 
-    if (metier !== "Hypno") continue;
-    if (!email) continue;
-    if ((suivi || "").toLowerCase() === "oui") continue;
+    if (metier !== "Hypno") {
+      updates.push([suivi]);
+      continue;
+    }
 
-    const diffTime = today - dateSeance;
-    const diffDays = diffTime / (1000 * 60 * 60 * 24);
+    if (!email || (suivi || "").toLowerCase() === "oui") {
+      updates.push([suivi]);
+      continue;
+    }
+
+    const diffDays = (today - dateSeance) / (1000 * 60 * 60 * 24);
 
     if (diffDays >= 15 && diffDays < 16) {
-      // 👉 ENVOI MAIL
+
+      const message = generateSuiviContent(email, nom, contactsMap);
+
       MailApp.sendEmail({
-  to: email,
-  subject: "Comment vous sentez-vous depuis votre séance ?",
+        to: email,
+        subject: "Comment vous sentez-vous depuis votre séance ?",
+        htmlBody: message + getSignatureHtml(),
+        inlineImages: {
+          signature: image,
+          insta: iconInsta,
+          facebook: iconFacebook,
+          maps: iconMaps
+        }
+      });
 
-  htmlBody: `
-    <p>Bonjour ${nom},</p>
+      updates.push(["oui"]);
 
-    <p>J'espère que vous allez bien 🙂</p>
-
-    <p>Suite à votre séance d'hypnose, je souhaitais prendre de vos nouvelles.</p>
-
-    <p>
-    Avez-vous remarqué des changements ?<br>
-    Comment vous sentez-vous aujourd’hui ?
-    </p>
-
-    <p>Votre retour est toujours précieux 🙏</p>
-
-    <br>
-
-    <p>Au plaisir d'échanger avec vous,</p>
-
-    <p>Sandy ROYET</p>
-
-  ${getSignatureHtml()}
-  `,
-
-  inlineImages: {
-    signature: image,
-    insta: iconInsta,
-    facebook: iconFacebook,
-    maps: iconMaps
-  }
-});
-
-          // 👉 marquer dans sheet
-          sheet.getRange(i + 1, 13).setValue("oui");
+    } else {
+      updates.push([suivi]);
     }
   }
+
+  // 🔥 UNE SEULE écriture
+  sheet.getRange(2, 13, updates.length, 1).setValues(updates);
+
   updateCalendarFromSheet();
 }
 
 function updateCalendarFromSheet() {
 
   const sheet = getSheet(CONFIG.SHEET_RDV);
-  const data = sheet.getDataRange().getValues();
+  const lastRow = sheet.getLastRow();
+  const data = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
 
-  for (let i = 1; i < data.length; i++) {
+  for (let i = 0; i < data.length; i++) {
 
-    const eventId = data[i][13];       // EventID
-    const facture = data[i][11];       // Facture envoyée
-    const suivi = data[i][12];         // Suivi 15j
+    const eventId = data[i][13]; // EventID
+    const facture = data[i][11]; // Facture envoyée
+    const suivi = data[i][12];   // Suivi 15j
 
     if (!eventId) continue;
 
@@ -587,24 +584,20 @@ function updateCalendarFromSheet() {
 
     let updated = false;
 
-    // 🔹 FACTURE
     if (facture === "oui" && !descLower.includes("facture envoyee")) {
       desc += "\nFacture envoyee";
       updated = true;
     }
 
-    // 🔹 SUIVI
     if (suivi === "oui" && !descLower.includes("suivi envoye")) {
       desc += "\nSuivi envoye";
       updated = true;
     }
 
-    // 🔥 écrire seulement si changement
     if (updated) {
       event.setDescription(desc);
     }
   }
-
 }
 function remplirFacture() {
   const ss = getSS();
@@ -614,9 +607,10 @@ function remplirFacture() {
   const numero = sheetRDV.getRange("T4").getValue();
   if (!numero) return;
 
-  const data = sheetRDV.getDataRange().getValues();
+  const lastRow = sheetRDV.getLastRow();
+  const data = sheetRDV.getRange(2, 1, lastRow - 1, 14).getValues();
 
-  for (let i = 1; i < data.length; i++) {
+  for (let i = 0; i < data.length; i++) {
     if (data[i][10] === numero) {
 
       sheetFacture.getRange("F4").setValue(data[i][1]); // Client
@@ -674,6 +668,17 @@ function getSheet(name) {
 
 function getSS() {
   return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function loadDriveAssets() {
+  if (DRIVE_READY) return;
+
+  DRIVE_CACHE.signature = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE).getBlob();
+  DRIVE_CACHE.insta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
+  DRIVE_CACHE.facebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
+  DRIVE_CACHE.maps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
+
+  DRIVE_READY = true;
 }
 
 function extractMontant(description) {
@@ -757,9 +762,10 @@ function syncContactsToSheet() {
 function findContactByEmail(email) {
 
   const sheet = getSheet("Carnet");
-  const data = sheet.getDataRange().getValues();
+  const lastRow = sheet.getLastRow();
+  const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
 
-  for (let i = 1; i < data.length; i++) {
+  for (let i = 0; i < data.length; i++) {
     const rowEmail = (data[i][3] || "").toLowerCase();
 
     if (rowEmail.includes(email.toLowerCase())) {
@@ -774,37 +780,87 @@ function findContactByEmail(email) {
   return null;
 }
 
-function generateEmailContent(email, clientFallback) {
+function generateEmailContent(email, clientFallback, contactsMap) {
 
-  const contact = findContactByEmail(email);
+  const contact = contactsMap[email.toLowerCase()];
 
-  // 🔹 si trouvé dans carnet
   if (contact) {
 
     if (contact.style === "tutoiement") {
       return `
         <p>Coucou ${contact.prenom},</p>
-
         <p>Je t’envoie ta facture 🙂</p>
-
         <p>Merci encore 🙏</p>
+        <p>Sandy</p>
       `;
     }
 
-    // vouvoiement
     return `
       <p>Bonjour ${contact.prenom},</p>
-
       <p>Veuillez trouver votre facture en pièce jointe.</p>
-
       <p>Merci pour votre confiance 🙏</p>
+      <p>Cordialement<br>Sandy ROYET</p>
     `;
   }
 
-  // 🔹 fallback (si inconnu)
   return `
     <p>Bonjour ${clientFallback || ""},</p>
-
-    <p>Veuillez trouver votre facture.</p>
+    <p>Veuillez trouver votre facture en pièce jointe.</p>
+    <p>Merci pour votre confiance 🙏</p>
+    <p>Cordialement<br>Sandy ROYET</p>
   `;
+}
+
+function getContactsMap() {
+  const sheet = getSheet("Carnet");
+  const lastRow = sheet.getLastRow();
+const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+
+  const map = {};
+
+  for (let i = 0; i < data.length; i++) {
+    const emails = (data[i][3] || "").toLowerCase().split(",");
+
+    emails.forEach(e => {
+      const email = e.trim();
+      if (!email) return;
+
+      map[email] = {
+        prenom: data[i][1],
+        nom: data[i][0],
+        style: (data[i][4] || "vouvoiement").toLowerCase()
+      };
+    });
+  }
+
+  return map;
+}
+
+function generateSuiviContent(email, nom, contactsMap) {
+
+  const contact = contactsMap[email.toLowerCase()];
+
+  if (contact && contact.style === "tutoiement") {
+    return `
+      <p>Coucou ${contact.prenom},</p>
+      <p>J’espère que tu vas bien 🙂</p>
+      <p>Je voulais prendre de tes nouvelles après la séance.</p>
+      <p>Tu ressens des changements ?</p>
+      <p>À bientôt 🙏</p>
+      <p>Sandy</p>
+    `;
+  }
+
+  return `
+    <p>Bonjour ${contact ? contact.prenom : nom},</p>
+    <p>J'espère que vous allez bien 🙂</p>
+    <p>Suite à votre séance d'hypnose, je souhaitais prendre de vos nouvelles.</p>
+    <p>Avez-vous remarqué des changements ?</p>
+    <p>Votre retour est précieux 🙏</p>
+    <p>Cordialement<br>Sandy ROYET</p>
+  `;
+}
+function testDrive() {
+  const file = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE);
+  Logger.log(file.getName());
 }
