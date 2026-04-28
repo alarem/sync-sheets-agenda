@@ -458,17 +458,15 @@ function envoyerFacture() {
   const iconInsta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
   const iconFacebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
   const iconMaps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
+  const message = generateEmailContent(email, client);
 
 MailApp.sendEmail({
   to: email,
   subject: "Facture " + numeroFacture,
 
   htmlBody: `
-    <p>Bonjour ${client},</p>
+    ${message}
 
-    <p>Veuillez trouver en pièce jointe votre facture <strong>${numeroFacture}</strong>.</p>
-
-    <p>Merci pour votre confiance 🙏</p>
 
     <br>
 
@@ -754,4 +752,59 @@ function syncContactsToSheet() {
   }
 
   console.log("Contacts importés : " + rows.length);
+}
+
+function findContactByEmail(email) {
+
+  const sheet = getSheet("Carnet");
+  const data = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    const rowEmail = (data[i][3] || "").toLowerCase();
+
+    if (rowEmail.includes(email.toLowerCase())) {
+      return {
+        prenom: data[i][1],
+        nom: data[i][0],
+        style: (data[i][4] || "vouvoiement").toLowerCase()
+      };
+    }
+  }
+
+  return null;
+}
+
+function generateEmailContent(email, clientFallback) {
+
+  const contact = findContactByEmail(email);
+
+  // 🔹 si trouvé dans carnet
+  if (contact) {
+
+    if (contact.style === "tutoiement") {
+      return `
+        <p>Coucou ${contact.prenom},</p>
+
+        <p>Je t’envoie ta facture 🙂</p>
+
+        <p>Merci encore 🙏</p>
+      `;
+    }
+
+    // vouvoiement
+    return `
+      <p>Bonjour ${contact.prenom},</p>
+
+      <p>Veuillez trouver votre facture en pièce jointe.</p>
+
+      <p>Merci pour votre confiance 🙏</p>
+    `;
+  }
+
+  // 🔹 fallback (si inconnu)
+  return `
+    <p>Bonjour ${clientFallback || ""},</p>
+
+    <p>Veuillez trouver votre facture.</p>
+  `;
 }
