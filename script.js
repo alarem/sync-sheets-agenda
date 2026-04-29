@@ -3,9 +3,10 @@ const CONFIG = {
   SHEET_FACTURE: "Facture",
 };
 let PDF_CACHE = {};
+
 //fonction principale
 function importBusinessEvents() {
-
+  
   // 🔹 1. Récupérer le fichier Google Sheets actif
   const ss = getSS();
   
@@ -313,10 +314,6 @@ function onOpen() {
     .addItem("Envoyer facture", "envoyerFacture")
     .addItem("Télécharger PDF", "telechargerPDF")
     .addToUi();
-    
-  ui.createMenu("👤 Contacts")
-  .addItem("Sync Contacts", "syncContactsToSheet")
-  .addToUi();
 }
 
  // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir de la case à cocher
@@ -610,8 +607,7 @@ function onEdit(e) {
 }
 function getSignatureHtml() {
   return `
-    <br>
-    <img src="https://drive.google.com/uc?export=view&id=1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy" width="200"><br><br>
+    <img src="https://drive.google.com/uc?export=view&id=1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy" width="100"><br><br>
    
     <table>
       <tr>
@@ -650,74 +646,6 @@ function extractMontant(description) {
   }, 0);
 }
 
-function syncContactsToSheet() {
-
-  const ss = getSS();
-  let sheet = ss.getSheetByName("Carnet");
-
-  if (!sheet) {
-    sheet = ss.insertSheet("Carnet");
-  }
-
-  const headers = ["Nom", "Prénom", "Téléphone", "Email"];
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, 4).clearContent();
-  }
-
-  const connections = People.People.Connections.list('people/me', {
-    pageSize: 1000,
-    personFields: 'names,emailAddresses,phoneNumbers'
-  });
-
-  const rows = [];
-
-  (connections.connections || []).forEach(person => {
-    try {
-
-      const names = person.names ? person.names[0] : {};
-      const firstName = names.givenName || "";
-      const lastName = names.familyName || "";
-
-      const phones = (person.phoneNumbers || [])
-      .map(p => {
-        if (!p.value) return "";
-
-        return p.value
-          .replace(/\s|\./g, "")
-          .replace(/^0/, "+33")
-          .replace(/-/g, ""); // bonus : enlève tirets
-      })
-      .filter(p => p) // supprime les vides
-      .join(", ");
-
-      const emails = (person.emailAddresses || [])
-        .map(e => e.value)
-        .join(", ");
-
-      if (!firstName && !lastName && !phones && !emails) return;
-
-      rows.push([
-        lastName,
-        firstName,
-        phones,
-        emails
-      ]);
-
-    } catch (err) {
-      console.log("Erreur contact: " + err);
-    }
-  });
-
-  if (rows.length > 0) {
-    sheet.getRange(2, 1, rows.length, 4).setValues(rows);
-  }
-
-  console.log("Contacts importés : " + rows.length);
-}
-
 function findContactByEmail(email) {
 
   const sheet = getSheet("Carnet");
@@ -746,7 +674,6 @@ function generateEmailContent(style, prenom, clientFallback) {
       <p>Coucou ${prenom || clientFallback},</p>
       <p>Je t’envoie ta facture 🙂</p>
       <p>Merci encore 🙏</p>
-      <p>Sandy</p>
     `;
   }
 
@@ -754,7 +681,7 @@ function generateEmailContent(style, prenom, clientFallback) {
     <p>Bonjour ${prenom || clientFallback},</p>
     <p>Veuillez trouver votre facture en pièce jointe.</p>
     <p>Merci pour votre confiance 🙏</p>
-    <p>Cordialement<br>Sandy ROYET</p>
+    <p>Cordialement</p>
   `;
 }
 
@@ -794,7 +721,6 @@ function generateSuiviContent(email, nom, contactsMap) {
       <p>Je voulais prendre de tes nouvelles après la séance.</p>
       <p>Tu ressens des changements ?</p>
       <p>À bientôt 🙏</p>
-      <p>Sandy</p>
     `;
   }
 
@@ -804,7 +730,7 @@ function generateSuiviContent(email, nom, contactsMap) {
     <p>Suite à votre séance d'hypnose, je souhaitais prendre de vos nouvelles.</p>
     <p>Avez-vous remarqué des changements ?</p>
     <p>Votre retour est précieux 🙏</p>
-    <p>Cordialement<br>Sandy ROYET</p>
+    <p>Cordialement</p>
   `;
 }
 function telechargerPDF() {
