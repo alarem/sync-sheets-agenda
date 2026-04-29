@@ -1,24 +1,8 @@
 const CONFIG = {
   SHEET_RDV: "RDV",
   SHEET_FACTURE: "Facture",
-  DRIVE: {
-    FACTURES_FOLDER: "1SLFLRLfLy-AiRPNDleOCBz5nbEDF54dX",
-    SIGNATURE: "1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy",
-    INSTA: "17kKuvOmaY76_r63cYsxe7kTiDaf0c4tc",
-    FACEBOOK: "17KdX9oV8TwQUVC6LgqMyN1lCoFR29XOW",
-    MAPS: "1_ojXvVn7B97v21prV5WDC4pUqNzMotom"
-  }
 };
-
-let DRIVE_READY = false;
 let PDF_CACHE = {};
-const DRIVE_CACHE = {
-  signature: null,
-  insta: null,
-  facebook: null,
-  maps: null
-};
-
 //fonction principale
 function importBusinessEvents() {
 
@@ -47,7 +31,8 @@ function importBusinessEvents() {
     "Numéro de Facture",   // 11 → index 10
     "Facture Envoyée",     // 12 → index 11
     "Suivi 15j",           // 13 → index 12
-    "EventID"              // 14 → index 13
+    "EventID",             // 14 → index 13
+    "Style"
   ];
 
   // 🔥 FORCER les headers à chaque exécution
@@ -56,12 +41,14 @@ function importBusinessEvents() {
   let lastRow = sheet.getLastRow();
 
   if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, 14).clearContent();
+    sheet.getRange(2, 1, lastRow - 1, 15).clearContent();
   }
 
   // 🔹 5. Choisir l'agenda
-  const calendars = CalendarApp.getAllCalendars();  //Récupère TOUS les agendas liés à mon compte Google
-
+  const calendars = [
+    CalendarApp.getDefaultCalendar(),
+    CalendarApp.getCalendarsByName("Agenda de nous ! ")[0]
+  ].filter(Boolean);
   // 🔹 6. Définir la période (modifiable)
   const startDate = new Date("2026-01-01"); // début large
   const endDate = new Date("2027-01-01");   // fin large // new Date (); aujourd'hui
@@ -69,16 +56,18 @@ function importBusinessEvents() {
   // 🔹 7. Récupérer tous les événements
   let events = [];    //crées une boîte vide
 
-  calendars.forEach(cal => {      //Pour chaque agenda
-    const calEvents = cal.getEvents(startDate, endDate);
-    events = events.concat(calEvents);
-  });
-
+  for (const cal of calendars) {
+  if (!cal) continue;
+  events.push(...cal.getEvents(startDate, endDate));
+  }
+  /*
+    calendars.forEach(cal => {      //Pour chaque agenda
+      const calEvents = cal.getEvents(startDate, endDate);
+      events = events.concat(calEvents);
+    });
+  */
   const rows = [];              //crées un tableau vide
   const seenEvents = new Set(); //stocker les informations dedans
-
-  // 🔹 DEBUG : nombre d'événements trouvés
-  console.log("Nombre d'événements : " + events.length); // afficher dans la console le nombre d'événement
 
   // 🔹 8. Parcourir chaque événement
   events.forEach(event => {
@@ -226,10 +215,18 @@ function importBusinessEvents() {
     /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
     ) || []).join(", ");
 
+    const contactsMap = getContactsMap();
+
+    let style = "vouvoiement"; // défaut
+
+    const firstEmail = (emails.split(",")[0] || "").trim().toLowerCase();
+
+    if (contactsMap[firstEmail]) {
+      style = contactsMap[firstEmail].style;
+    }
+
     // 🔸 19. créer le numéro de facture à partir de la date et de l'heure
-
     let numeroFacture = "";
-
     // 🔍 chercher un numéro type HYP-2026-001
     const matchFacture = description.match(/\b[A-Z]{2,5}[-_ ]?\d{4}[-_ ]?\d{1,4}\b/i);
 
@@ -252,7 +249,8 @@ function importBusinessEvents() {
       numeroFacture,
       factureEnvoyee,
       suiviEnvoye,
-      eventId
+      eventId,
+      style
     ]);
 
     } catch (err) {
@@ -285,7 +283,7 @@ function importBusinessEvents() {
   if (rows.length > 0) {
     const finalLastRow = rows.length + 1;
 
-    const dataRange = sheet.getRange(2, 1, finalLastRow - 1, 14);
+    const dataRange = sheet.getRange(2, 1, finalLastRow - 1, 15);
     dataRange.sort([{column: 3, ascending: true}, {column: 5, ascending: true}]);
   }
 
@@ -312,8 +310,8 @@ function onOpen() {
   .addToUi();
 
   ui.createMenu("📄 Facture")
-    .addItem("Générer PDF", "genererPDF")
     .addItem("Envoyer facture", "envoyerFacture")
+    .addItem("Télécharger PDF", "telechargerPDF")
     .addToUi();
     
   ui.createMenu("👤 Contacts")
@@ -327,20 +325,19 @@ function boutonMobile() {
 
   const actions = [
     { cell: "S3", func: importBusinessEvents },
-    { cell: "S4", func: genererPDF },
-    { cell: "S5", func: envoyerFacture }
+    { cell: "S4", func: envoyerFacture }
   ];
 
   actions.forEach(action => {
     try {
       const value = sheet.getRange(action.cell).getValue();
 
-      if (value === true) {
+      if (value === true || value === "TRUE") {
         action.func();
         sheet.getRange(action.cell).setValue(false);
       }
     } catch (error) {
-      Logger.log(`Erreur ${action.cell}: ${error}`);
+      console.log(`Erreur ${action.cell}: ${error}`);
     }
   });
 }
@@ -381,61 +378,44 @@ function genererNumerosFacture() {
 
 // 🔹 Permet de générer une facture en PDF et de l'enregistrer dans le drive
 function genererPDF() {
-  remplirFacture(); // 🔥 sécurise les données
+  remplirFacture();
 
   const ss = getSS();
   const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
   const numeroFacture = sheet.getRange("F6").getValue();
 
+  if (!numeroFacture) {
+    throw new Error("Numéro de facture manquant");
+  }
+
+  // 🔥 cache mémoire (ultra rapide)
   if (PDF_CACHE[numeroFacture]) {
     return PDF_CACHE[numeroFacture];
   }
 
-  if (!numeroFacture) {
-    SpreadsheetApp.getUi().alert("Numéro de facture manquant");
-    return;
-  }
-  const folder = DriveApp.getFolderById(CONFIG.DRIVE.FACTURES_FOLDER); 
-  // 🔍 Vérifier si fichier existe déjà
-  const files = folder.getFilesByName(numeroFacture + ".pdf");
-
-  if (files.hasNext()) {
-    Logger.log("PDF déjà existant");
-    return files.next().getBlob(); // 👉 on retourne l'existant
-  }
-
   const url = ss.getUrl().replace(/edit$/, "");
-  
-  const exportUrl = url + "export?format=pdf" +
+
+  const exportUrl =
+    url + "export?format=pdf" +
     "&gid=" + sheet.getSheetId() +
     "&portrait=true" +
     "&fitw=true" +
-    "&top_margin=0.5" +
-    "&bottom_margin=0.5" +
-    "&left_margin=0.5" +
-    "&right_margin=0.5" +
-    "&sheetnames=false&printtitle=false&pagenumbers=false&gridlines=false";
+    "&gridlines=false" +
+    "&printtitle=false";
 
   const token = ScriptApp.getOAuthToken();
 
-  const response = UrlFetchApp.fetch(exportUrl, {
-    headers: {
-      Authorization: "Bearer " + token
-    }
-  });
+  const blob = UrlFetchApp.fetch(exportUrl, {
+    headers: { Authorization: "Bearer " + token },
+    muteHttpExceptions: true
+  }).getBlob().setName(numeroFacture + ".pdf");
 
-  const blob = response.getBlob().setName(numeroFacture + ".pdf");
-
-  // 📁 Sauvegarde dans Drive
-  folder.createFile(blob);
-  
   PDF_CACHE[numeroFacture] = blob;
 
   return blob;
 }
-
 function envoyerFacture() {
-  initApp();
+  
   remplirFacture(); // 🔥 garantit que tout est à jour
   const ss = getSS();
   const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
@@ -446,13 +426,17 @@ function envoyerFacture() {
 
   const sheetRDV = ss.getSheetByName(CONFIG.SHEET_RDV);
   const lastRow = sheetRDV.getLastRow();
-  const data = sheetRDV.getRange(2, 1, lastRow - 1, 14).getValues();
-
+  const data = sheetRDV.getRange(2, 1, lastRow - 1, 15).getValues();
+  
   let eventId = null;
+  let style = "vouvoiement";
+  let prenom = client;
 
   for (let i = 0; i < data.length; i++) {
     if (data[i][10] === numeroFacture) { // colonne facture
       eventId = data[i][13];             // colonne EventID
+      style = data[i][14];     
+      prenom = data[i][1]; 
       break;
     }
   }
@@ -468,12 +452,7 @@ function envoyerFacture() {
   SpreadsheetApp.getUi().alert("Erreur génération PDF");
   return;
   }
-  
-  const image = DRIVE_CACHE.signature;
-  const iconInsta = DRIVE_CACHE.insta;
-  const iconFacebook = DRIVE_CACHE.facebook;
-  const iconMaps = DRIVE_CACHE.maps;
-  const message = generateEmailContent(email, client, contactsMap);
+  const message = generateEmailContent(style, prenom, client);
 
   MailApp.sendEmail({
     to: email,
@@ -485,12 +464,8 @@ function envoyerFacture() {
     `,
 
     attachments: [pdf],
-    inlineImages: {
-      signature: image,
-      insta: iconInsta,
-      facebook: iconFacebook,
-      maps: iconMaps
-    }
+
+    
   });
   // 👉 mettre à jour le sheet aussi
   for (let i = 0; i < data.length; i++) {
@@ -503,8 +478,7 @@ function envoyerFacture() {
 }
 
 function suiviHypnoJ15() {
-
-  initApp();
+  
   const sheet = getSheet(CONFIG.SHEET_RDV);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
@@ -512,11 +486,8 @@ function suiviHypnoJ15() {
   const data = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
   const today = new Date();
   const contactsMap = getContactsMap();
+  
   const updates = [];
-  const image = DRIVE_CACHE.signature;
-  const iconInsta = DRIVE_CACHE.insta;
-  const iconFacebook = DRIVE_CACHE.facebook;
-  const iconMaps = DRIVE_CACHE.maps;
 
   for (let i = 0; i < data.length; i++) {
 
@@ -546,12 +517,6 @@ function suiviHypnoJ15() {
         to: email,
         subject: "Comment vous sentez-vous depuis votre séance ?",
         htmlBody: message + getSignatureHtml(),
-        inlineImages: {
-          signature: image,
-          insta: iconInsta,
-          facebook: iconFacebook,
-          maps: iconMaps
-        }
       });
 
       updates.push(["oui"]);
@@ -613,7 +578,7 @@ function remplirFacture() {
   if (!numero) return;
 
   const lastRow = sheetRDV.getLastRow();
-  const data = sheetRDV.getRange(2, 1, lastRow - 1, 14).getValues();
+  const data = sheetRDV.getRange(2, 1, lastRow - 1, 15).getValues();
 
   for (let i = 0; i < data.length; i++) {
     if (data[i][10] === numero) {
@@ -643,24 +608,23 @@ function onEdit(e) {
     }
   }
 }
-
 function getSignatureHtml() {
   return `
     <br>
-    <img src="cid:signature" style="width:200px; height:auto;"><br><br>
-
+    <img src="https://drive.google.com/uc?export=view&id=1LxTNpm3QTY5U55c4wkIrFVonvo0ZFSHy" width="200"><br><br>
+   
     <table>
       <tr>
         <td><a href="https://www.instagram.com/sandy_hypno/">
-          <img src="cid:insta" width="30">
+          <img src="https://cdn-icons-png.flaticon.com/512/2111/2111463.png" width="30">
         </a></td>
         <td width="10"></td>
         <td><a href="https://www.facebook.com/share/1aLWmSqeii/">
-          <img src="cid:facebook" width="30">
+          <img src="https://cdn-icons-png.flaticon.com/512/733/733547.png" width="30">
         </a></td>
         <td width="10"></td>
         <td><a href="https://maps.app.goo.gl/ZbCGRXKUntZTxT1F6">
-          <img src="cid:maps" width="30">
+          <img src="https://cdn-icons-png.flaticon.com/512/684/684908.png" width="30">
         </a></td>
       </tr>
     </table>
@@ -675,31 +639,6 @@ function getSS() {
   return SpreadsheetApp.getActiveSpreadsheet();
 }
 
-function loadDriveAssets() {
-  if (DRIVE_READY) return;
-
-  try {
-    DRIVE_CACHE.signature = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE).getBlob();
-    DRIVE_CACHE.insta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
-    DRIVE_CACHE.facebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
-    DRIVE_CACHE.maps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
-
-    DRIVE_READY = true;
-
-  } catch (err) {
-    Logger.log("Erreur Drive (retry): " + err);
-
-    Utilities.sleep(1000); // ⏳ pause 1 seconde
-
-    // 🔁 retry 1 fois
-    DRIVE_CACHE.signature = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE).getBlob();
-    DRIVE_CACHE.insta = DriveApp.getFileById(CONFIG.DRIVE.INSTA).getBlob();
-    DRIVE_CACHE.facebook = DriveApp.getFileById(CONFIG.DRIVE.FACEBOOK).getBlob();
-    DRIVE_CACHE.maps = DriveApp.getFileById(CONFIG.DRIVE.MAPS).getBlob();
-
-    DRIVE_READY = true;
-  }
-}
 
 function extractMontant(description) {
   const matches = description.match(/(\d+(?:[.,]\d+)?)\s*(€|eur|euros?)/gi);
@@ -800,31 +739,19 @@ function findContactByEmail(email) {
   return null;
 }
 
-function generateEmailContent(email, clientFallback, contactsMap) {
+function generateEmailContent(style, prenom, clientFallback) {
 
-  const contact = contactsMap[email.toLowerCase()];
-
-  if (contact) {
-
-    if (contact.style === "tutoiement") {
-      return `
-        <p>Coucou ${contact.prenom},</p>
-        <p>Je t’envoie ta facture 🙂</p>
-        <p>Merci encore 🙏</p>
-        <p>Sandy</p>
-      `;
-    }
-
+  if (style === "tutoiement") {
     return `
-      <p>Bonjour ${contact.prenom},</p>
-      <p>Veuillez trouver votre facture en pièce jointe.</p>
-      <p>Merci pour votre confiance 🙏</p>
-      <p>Cordialement<br>Sandy ROYET</p>
+      <p>Coucou ${prenom || clientFallback},</p>
+      <p>Je t’envoie ta facture 🙂</p>
+      <p>Merci encore 🙏</p>
+      <p>Sandy</p>
     `;
   }
 
   return `
-    <p>Bonjour ${clientFallback || ""},</p>
+    <p>Bonjour ${prenom || clientFallback},</p>
     <p>Veuillez trouver votre facture en pièce jointe.</p>
     <p>Merci pour votre confiance 🙏</p>
     <p>Cordialement<br>Sandy ROYET</p>
@@ -880,10 +807,21 @@ function generateSuiviContent(email, nom, contactsMap) {
     <p>Cordialement<br>Sandy ROYET</p>
   `;
 }
-function testDrive() {
-  const file = DriveApp.getFileById(CONFIG.DRIVE.SIGNATURE);
-  Logger.log(file.getName());
-}
-function initApp() {
-  loadDriveAssets();
+function telechargerPDF() {
+  const pdf = genererPDF();
+
+  const base64 = Utilities.base64Encode(pdf.getBytes());
+  const html = `
+    <html>
+      <body>
+        <a download="${pdf.getName()}" href="data:application/pdf;base64,${base64}">
+          Télécharger la facture
+        </a>
+        <script>document.querySelector('a').click();</script>
+      </body>
+    </html>
+  `;
+
+  const ui = HtmlService.createHtmlOutput(html).setWidth(10).setHeight(10);
+  SpreadsheetApp.getUi().showModalDialog(ui, "Téléchargement...");
 }
