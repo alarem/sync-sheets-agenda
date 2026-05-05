@@ -65,6 +65,7 @@ function importBusinessEvents() {
 
   const rows = [];              //crées un tableau vide
   const seenEvents = new Set(); //stocker les informations dedans
+  const contactsMap = getContactsMap();
 
   // 🔹 8. Parcourir chaque événement
   events.forEach(event => {
@@ -212,8 +213,7 @@ function importBusinessEvents() {
     /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
     ) || []).join(", ");
 
-    const contactsMap = getContactsMap();
-
+    
     // 🔸 Détecter les numéros adresse
       let adresse = "";
 
@@ -401,7 +401,7 @@ function genererNumerosFacture() {
 // 🔹 Permet de générer une facture en PDF et de l'enregistrer dans le drive
 function genererPDF() {
   remplirFacture();
-
+  SpreadsheetApp.flush();
   const ss = getSS();
   const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
   const COL = getColumnMap(sheet);
@@ -440,6 +440,7 @@ function genererPDF() {
 function envoyerFacture() {
   
   remplirFacture(); // 🔥 garantit que tout est à jour
+  SpreadsheetApp.flush();
   const ss = getSS();
   const sheetFacture = ss.getSheetByName(CONFIG.SHEET_FACTURE);
   const contactsMap = getContactsMap();
@@ -632,6 +633,7 @@ function onEdit(e) {
     // 🔹 Si tu changes le numéro → auto
     if (e.range.getA1Notation() === "T4") {
       remplirFacture();
+      SpreadsheetApp.flush();
     }
   }
 }
