@@ -19,21 +19,22 @@ function importBusinessEvents() {
 
   // 🔥 toujours garantir les entêtes
   const headers = [
-    "Métier",
-    "Client",
-    "Date",
-    "Mois",
-    "Heure",
-    "Montant",
-    "Payé",                // 07 → index 06
-    "mode Paiement",       // 08 → index 07
-    "N° de téléphones",    // 09 → index 08
-    "Adresse emails",      // 10 → index 09
-    "Numéro de Facture",   // 11 → index 10
-    "Facture Envoyée",     // 12 → index 11
-    "Suivi 15j",           // 13 → index 12
-    "EventID",             // 14 → index 13
-    "Style"
+    "metier",
+    "client",
+    "date",
+    "mois",
+    "heure",
+    "montant",
+    "paye",                // 07 → index 06
+    "mode paiement",       // 08 → index 07
+    "n° de telephones",    // 09 → index 08
+    "adresse client",      // 10 → index 09
+    "adresse emails",      // 11 → index 10
+    "numero de facture",   // 12 → index 11
+    "facture envoyee",     // 13 → index 12
+    "suivi 15j",           // 14 → index 13
+    "eventid",             // 15 → index 14
+    "style"                // 16 → index 15
   ];
 
   // 🔥 FORCER les headers à chaque exécution
@@ -42,7 +43,7 @@ function importBusinessEvents() {
   let lastRow = sheet.getLastRow();
 
   if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, 15).clearContent();
+    sheet.getRange(2, 1, lastRow - 1, 11).clearContent();
   }
 
   // 🔹 5. Choisir l'agenda
@@ -61,22 +62,17 @@ function importBusinessEvents() {
   if (!cal) continue;
   events.push(...cal.getEvents(startDate, endDate));
   }
-  /*
-    calendars.forEach(cal => {      //Pour chaque agenda
-      const calEvents = cal.getEvents(startDate, endDate);
-      events = events.concat(calEvents);
-    });
-  */
+
   const rows = [];              //crées un tableau vide
   const seenEvents = new Set(); //stocker les informations dedans
 
   // 🔹 8. Parcourir chaque événement
   events.forEach(event => {
     try {
-    const eventId = event.getId().toString().trim(); //récupères l’identifiant unique de l’événement,assure format texte, nettoie
+    const eventid = event.getId().toString().trim(); //récupères l’identifiant unique de l’événement,assure format texte, nettoie
     // 🔁 éviter doublons dans le script
-    if (seenEvents.has(eventId)) return;
-    seenEvents.add(eventId);
+    if (seenEvents.has(eventid)) return;
+    seenEvents.add(eventid);
     
     const title = event.getTitle() || "";           // ex: HYPNO Dupont - Séance
     const description = event.getDescription() || ""; //  || "" évite les crash si déscription vide
@@ -87,15 +83,15 @@ function importBusinessEvents() {
     
     // 🔸 détecter statut facture / suivi
 
-    let factureEnvoyee = "non";
-    let suiviEnvoye = "non";
+    let factureenvoyee = "non";
+    let suivienvoye = "non";
 
     if (desc.includes("facture envoyee")) {
-      factureEnvoyee = "oui";
+      factureenvoyee = "oui";
     }
 
     if (desc.includes("suivi envoye")) {
-      suiviEnvoye = "oui";
+      suivienvoye = "oui";
     }
     const start = event.getStartTime();
 
@@ -137,7 +133,7 @@ function importBusinessEvents() {
     // 🔸 10. Nettoyer le titre (enlever [HYPNO] etc.)
     let cleanTitle = originalTitle;
 
-    // 🔥 enlever le mot métier AU DÉBUT (sans dépendre de lowerTitle)
+    // 🔥 enlever le mot Metier AU DÉBUT (sans dépendre de lowerTitle)
     for (let key in metiers) {
       for (let keyword of metiers[key]) {
         const regex = new RegExp("^" + keyword, "i");
@@ -177,22 +173,22 @@ function importBusinessEvents() {
     let montant = extractMontant(description);
 
     // 🔸 15. Détecter le mode de paiement
-    let modePaiement = "";
+    let modepaiement = "";
 
     if (/\bespeces?\b/.test(desc)) {
-      modePaiement = "Espèces";
+      modepaiement = "Espèces";
     }
     else if (/\bvirement\b/.test(desc)) {
-      modePaiement = "Virement";
+      modepaiement = "Virement";
     }
     else if (/\bcheque?s?\b/.test(desc)) {
-      modePaiement = "Chèque";
+      modepaiement = "Chèque";
     }
     else if (/\b(cb|carte)\b/.test(desc)) {
-      modePaiement = "CB";
+      modepaiement = "CB";
     }
 
-    // 🔸 16. Extraire le statut payé
+    // 🔸 16. Extraire le statut Paye
     let paye = "non";
 
     // 🔥 détecte payé / payée / payés / payées MAIS PAS "heures payées"
@@ -211,31 +207,59 @@ function importBusinessEvents() {
       p.replace(/\s|\./g, "").replace(/^0/, "+33")
     ).join(", ");
 
-    // 🔸 18. Détecter les numéros adresse mails
+    // 🔸 Détecter les numéros adresse mails
     const emails = (description.match(
     /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
     ) || []).join(", ");
 
     const contactsMap = getContactsMap();
 
+    // 🔸 Détecter les numéros adresse
+      let adresse = "";
+
+      // 🔥 PRIORITÉ 1 : description
+      const matchAdresse = description.match(/adresse\s*:\s*(.+)/i);
+
+      if (matchAdresse) {
+        adresse = matchAdresse[1].trim();
+      }
+
+      // 🔥 PRIORITÉ 2 : carnet
+      if (!adresse) {
+        const firstEmail = (emails.split(",")[0] || "").trim().toLowerCase();
+
+        if (contactsMap[firstEmail] && contactsMap[firstEmail].adresse) {
+          adresse = contactsMap[firstEmail].adresse;
+        }
+      }
+
     let style = "vouvoiement"; // défaut
 
-    const firstEmail = (emails.split(",")[0] || "").trim().toLowerCase();
-
-    if (contactsMap[firstEmail]) {
-      style = contactsMap[firstEmail].style;
+    if (/\btutoiement\b|\btuto\b/.test(desc)) {
+      style = "tutoiement";
+    } else if (desc.includes("vouvoiement")) {
+      style = "vouvoiement";
     }
 
-    // 🔸 19. créer le numéro de facture à partir de la date et de l'heure
-    let numeroFacture = "";
+    // 🔥 PRIORITÉ 2 : contacts (si rien trouvé)
+    if (style !== "tutoiement") {
+      const firstEmail = (emails.split(",")[0] || "").trim().toLowerCase();
+
+      if (contactsMap[firstEmail]) {
+        style = contactsMap[firstEmail].style;
+      }
+    }
+
+    // 🔸 20. créer le Numero de Facture à partir de la date et de l'heure
+    let numerofacture = "";
     // 🔍 chercher un numéro type HYP-2026-001
     const matchFacture = description.match(/\b[A-Z]{2,5}[-_ ]?\d{4}[-_ ]?\d{1,4}\b/i);
 
     if (matchFacture) {
-      numeroFacture = matchFacture[0].toUpperCase();
+      numerofacture = matchFacture[0].toUpperCase();
     }
 
-    // 🔸 20. Ajouter au tableau (🚀 plus rapide que appendRow)
+    // 🔸 21. Ajouter au tableau 
     rows.push([
       metier,
       client,
@@ -244,13 +268,14 @@ function importBusinessEvents() {
       time,
       montant,
       paye,
-      modePaiement,
+      modepaiement,
       phones,
+      adresse,
       emails,
-      numeroFacture,
-      factureEnvoyee,
-      suiviEnvoye,
-      eventId,
+      numerofacture,
+      factureenvoyee,
+      suivienvoye,
+      eventid,
       style
     ]);
 
@@ -260,11 +285,10 @@ function importBusinessEvents() {
   });
   
 
-  // 🔹 19. Écriture en une seule fois (🚀 GROS gain de performance)
+  // 🔹 Écriture en une seule fois (🚀 GROS gain de performance)
   if (rows.length === 0) {
     console.log("Aucun nouvel événement à ajouter");
   } else {
-  //const startRow = lastRow + 1;
   const startRow = 2; // TOUJOURS sous les headers
 
   sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
@@ -284,20 +308,20 @@ function importBusinessEvents() {
   if (rows.length > 0) {
     const finalLastRow = rows.length + 1;
 
-    const dataRange = sheet.getRange(2, 1, finalLastRow - 1, 15);
+    const dataRange = sheet.getRange(2, 1, finalLastRow - 1, 16);
     dataRange.sort([{column: 3, ascending: true}, {column: 5, ascending: true}]);
   }
 
   genererNumerosFacture();
 
   // 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P2
-  sheet.getRange("P2")
+  sheet.getRange("Q2")
   .setValue("Dernière mise à jour : " + now)
   .setFontWeight("bold");
 
   // 🔹 Permet de cacher la colonne avec les log google
-  if (!sheet.isColumnHiddenByUser(14)) {
-    sheet.hideColumns(14);
+  if (!sheet.isColumnHiddenByUser(15)) {
+    sheet.hideColumns(15);
   }
 }
 
@@ -307,12 +331,12 @@ function onOpen() {
 
   ui.createMenu("🔄 Sync")
   .addItem("Actualiser RDV", "importBusinessEvents")
-  .addItem("Sync Calendar", "updateCalendarFromSheet")
   .addToUi();
 
   ui.createMenu("📄 Facture")
     .addItem("Envoyer facture", "envoyerFacture")
     .addItem("Télécharger PDF", "telechargerPDF")
+    .addItem("Télécharger JSON", "telechargerJSON")
     .addToUi();
 }
 
@@ -339,10 +363,11 @@ function boutonMobile() {
   });
 }
 
-// 🔹 Permet de générer un numéro de facture
+// 🔹 Permet de générer un Numero de Facture
 function genererNumerosFacture() {
   const sheet = getSheet(CONFIG.SHEET_RDV);
-  const data = sheet.getRange(2, 1, sheet.getLastRow()-1, 12).getValues();
+  const COL = getColumnMap(sheet);
+  const data = sheet.getRange(2, 1, sheet.getLastRow()-1, 16).getValues();
 
   let compteur = 1;
 
@@ -350,11 +375,11 @@ function genererNumerosFacture() {
 
   for (let i = 0; i < data.length; i++) {
 
-    const metier = data[i][0];
-    const date = data[i][2];
-    const numeroExistant = data[i][10];
+    const metier = data[i][COL["metier"]];
+    const date = data[i][COL["date"]];
+    const numeroExistant = data[i][COL["numero de facture"]];
 
-    let numeroFacture = numeroExistant; // ⚠️ important
+    let numerofacture = numeroExistant; 
 
     // 🔒 SI déjà un numéro → on garde
     if (!numeroExistant && metier === "Hypno" && date) {
@@ -362,15 +387,15 @@ function genererNumerosFacture() {
       const year = new Date(date).getFullYear();
       const numero = String(compteur).padStart(3, "0");
 
-      numeroFacture = `HYP-${year}-${numero}`;
+      numerofacture = `HYP-${year}-${numero}`;
       compteur++;
     }
 
-    updates.push([numeroFacture]); // 🔥 on stocke
+    updates.push([numerofacture]); // 🔥 on stocke
   }
 
   // 🔥 UNE SEULE écriture
-  sheet.getRange(2, 11, updates.length, 1).setValues(updates);
+  sheet.getRange(2, 12, updates.length, 1).setValues(updates);
 }
 
 // 🔹 Permet de générer une facture en PDF et de l'enregistrer dans le drive
@@ -379,15 +404,16 @@ function genererPDF() {
 
   const ss = getSS();
   const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
-  const numeroFacture = sheet.getRange("F6").getValue();
+  const COL = getColumnMap(sheet);
+  const numerofacture = sheet.getRange("F6").getValue();
 
-  if (!numeroFacture) {
-    throw new Error("Numéro de facture manquant");
+  if (!numerofacture) {
+    throw new Error("Numero de Facture manquant");
   }
 
   // 🔥 cache mémoire (ultra rapide)
-  if (PDF_CACHE[numeroFacture]) {
-    return PDF_CACHE[numeroFacture];
+  if (PDF_CACHE[numerofacture]) {
+    return PDF_CACHE[numerofacture];
   }
 
   const url = ss.getUrl().replace(/edit$/, "");
@@ -405,9 +431,9 @@ function genererPDF() {
   const blob = UrlFetchApp.fetch(exportUrl, {
     headers: { Authorization: "Bearer " + token },
     muteHttpExceptions: true
-  }).getBlob().setName(numeroFacture + ".pdf");
+  }).getBlob().setName(numerofacture + ".pdf");
 
-  PDF_CACHE[numeroFacture] = blob;
+  PDF_CACHE[numerofacture] = blob;
 
   return blob;
 }
@@ -415,25 +441,26 @@ function envoyerFacture() {
   
   remplirFacture(); // 🔥 garantit que tout est à jour
   const ss = getSS();
-  const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
+  const sheetFacture = ss.getSheetByName(CONFIG.SHEET_FACTURE);
   const contactsMap = getContactsMap();
-  const numeroFacture = sheet.getRange("F6").getValue();
-  const email = sheet.getRange("J6").getValue(); // adapte selon ta cellule
-  const client = sheet.getRange("F4").getValue();
+  const numerofacture = sheetFacture.getRange("F6").getValue();
+  const email = sheetFacture.getRange("J6").getValue(); // adapte selon ta cellule
+  const client = sheetFacture.getRange("F4").getValue();
 
   const sheetRDV = ss.getSheetByName(CONFIG.SHEET_RDV);
+  const COL = getColumnMap(sheetRDV);
   const lastRow = sheetRDV.getLastRow();
-  const data = sheetRDV.getRange(2, 1, lastRow - 1, 15).getValues();
+  const data = sheetRDV.getRange(2, 1, lastRow - 1, 16).getValues();
   
-  let eventId = null;
+  let eventid = null;
   let style = "vouvoiement";
   let prenom = client;
 
   for (let i = 0; i < data.length; i++) {
-    if (data[i][10] === numeroFacture) { // colonne facture
-      eventId = data[i][13];             // colonne EventID
-      style = data[i][14];     
-      prenom = data[i][1]; 
+    if (data[i][COL["numero de facture"]] === numerofacture) { // colonne facture
+      eventid = data[i][COL["eventid"]];             // colonne eventid
+      style = data[i][COL["style"]];     
+      prenom = data[i][COL["client"]]; 
       break;
     }
   }
@@ -453,7 +480,7 @@ function envoyerFacture() {
 
   MailApp.sendEmail({
     to: email,
-    subject: "Facture " + numeroFacture,
+    subject: "Facture " + numerofacture,
 
     htmlBody: `
       ${message}
@@ -466,8 +493,8 @@ function envoyerFacture() {
   });
   // 👉 mettre à jour le sheet aussi
   for (let i = 0; i < data.length; i++) {
-    if (data[i][10] === numeroFacture) {
-      sheetRDV.getRange(i + 2, 12).setValue("oui"); // colonne Facture Envoyée
+    if (data[i][COL["numero de facture"]] === numerofacture) {
+      sheetRDV.getRange(i + 2, COL["facture envoyee"] + 1).setValue("oui"); 
       break;
     }
   }
@@ -477,10 +504,11 @@ function envoyerFacture() {
 function suiviHypnoJ15() {
   
   const sheet = getSheet(CONFIG.SHEET_RDV);
+  const COL = getColumnMap(sheet);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
 
-  const data = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 16).getValues();
   const today = new Date();
   const contactsMap = getContactsMap();
   
@@ -488,11 +516,11 @@ function suiviHypnoJ15() {
 
   for (let i = 0; i < data.length; i++) {
 
-    const metier = data[i][0];
-    const nom = data[i][1];
-    const dateSeance = new Date(data[i][2]);
-    const email = data[i][9];
-    const suivi = data[i][12];
+    const metier = data[i][COL["metier"]];
+    const nom = data[i][COL["client"]];
+    const dateSeance = new Date(data[i][COL["date"]]);
+    const email = data[i][COL["adresse emails"]];
+    const suivi = data[i][COL["suivi 15j"]];
 
     if (metier !== "Hypno") {
       updates.push([suivi]);
@@ -524,7 +552,7 @@ function suiviHypnoJ15() {
   }
 
   // 🔥 UNE SEULE écriture
-  sheet.getRange(2, 13, updates.length, 1).setValues(updates);
+  sheet.getRange(2, COL["suivi 15j"] + 1, updates.length, 1).setValues(updates);
 
   updateCalendarFromSheet();
 }
@@ -532,18 +560,19 @@ function suiviHypnoJ15() {
 function updateCalendarFromSheet() {
 
   const sheet = getSheet(CONFIG.SHEET_RDV);
+  const COL = getColumnMap(sheet);
   const lastRow = sheet.getLastRow();
-  const data = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 16).getValues();
 
   for (let i = 0; i < data.length; i++) {
 
-    const eventId = data[i][13]; // EventID
-    const facture = data[i][11]; // Facture envoyée
-    const suivi = data[i][12];   // Suivi 15j
+    const eventid = data[i][COL["eventid"]]; // eventid
+    const facture = data[i][COL["facture envoyee"]]; // Facture Envoyee
+    const suivi = data[i][COL["suivi 15j"]];   // Suivi 15j
 
-    if (!eventId) continue;
+    if (!eventid) continue;
 
-    const event = CalendarApp.getEventById(eventId);
+    const event = CalendarApp.getEventById(eventid);
     if (!event) continue;
 
     let desc = event.getDescription() || "";
@@ -570,22 +599,23 @@ function remplirFacture() {
   const ss = getSS();
   const sheetFacture = ss.getSheetByName(CONFIG.SHEET_FACTURE);
   const sheetRDV = ss.getSheetByName(CONFIG.SHEET_RDV);
+  const COL = getColumnMap(sheetRDV);
 
   const numero = sheetRDV.getRange("T4").getValue();
   if (!numero) return;
 
   const lastRow = sheetRDV.getLastRow();
-  const data = sheetRDV.getRange(2, 1, lastRow - 1, 15).getValues();
+  const data = sheetRDV.getRange(2, 1, lastRow - 1, 16).getValues();
 
   for (let i = 0; i < data.length; i++) {
-    if (data[i][10] === numero) {
+    if (data[i][COL["numero de facture"]] === numero) {
 
-      sheetFacture.getRange("F4").setValue(data[i][1]); // Client
-      sheetFacture.getRange("F5").setValue(data[i][2]); // Date
-      sheetFacture.getRange("F6").setValue(data[i][10]); // Numéro de facture
-      sheetFacture.getRange("E19").setValue(data[i][5]); // Montant
-      sheetFacture.getRange("F25").setValue(data[i][7]); // type de paiment
-      sheetFacture.getRange("J6").setValue(data[i][9]); // Email
+      sheetFacture.getRange("F4").setValue(data[i][COL["client"]]); // Client
+      sheetFacture.getRange("F5").setValue(data[i][COL["date"]]); // Date
+      sheetFacture.getRange("F6").setValue(data[i][COL["numero de facture"]]); // Numero de Facture
+      sheetFacture.getRange("E19").setValue(data[i][COL["montant"]]); // Montant
+      sheetFacture.getRange("F25").setValue(data[i][COL["mode paiement"]]); // type de paiment
+      sheetFacture.getRange("J6").setValue(data[i][COL["adresse emails"]]); // Email
 
       return;
     }
@@ -635,7 +665,6 @@ function getSS() {
   return SpreadsheetApp.getActiveSpreadsheet();
 }
 
-
 function extractMontant(description) {
   const matches = description.match(/(\d+(?:[.,]\d+)?)\s*(€|eur|euros?)/gi);
   if (!matches) return 0;
@@ -650,7 +679,7 @@ function findContactByEmail(email) {
 
   const sheet = getSheet("Carnet");
   const lastRow = sheet.getLastRow();
-  const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
 
   for (let i = 0; i < data.length; i++) {
     const rowEmail = (data[i][3] || "").toLowerCase();
@@ -688,7 +717,7 @@ function generateEmailContent(style, prenom, clientFallback) {
 function getContactsMap() {
   const sheet = getSheet("Carnet");
   const lastRow = sheet.getLastRow();
-  const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
 
   const map = {};
 
@@ -702,7 +731,8 @@ function getContactsMap() {
       map[email] = {
         prenom: data[i][1],
         nom: data[i][0],
-        style: (data[i][4] || "vouvoiement").toLowerCase()
+        style: (data[i][4] || "vouvoiement").toLowerCase(),
+        adresse: data[i][5] || ""
       };
     });
   }
@@ -748,6 +778,98 @@ function telechargerPDF() {
     </html>
   `;
 
-  const ui = HtmlService.createHtmlOutput(html).setWidth(10).setHeight(10);
+  const ui = HtmlService.createHtmlOutput(html).setWidth(11).setHeight(11);
   SpreadsheetApp.getUi().showModalDialog(ui, "Téléchargement...");
+}
+
+function exportFactureJSON(numerofacture) {
+  const sheet = getSheet(CONFIG.SHEET_RDV);
+  const COL = getColumnMap(sheet);
+  const data = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][COL["numero de facture"]] === numerofacture) {
+
+      const montantTTC = data[i][COL["montant"]];
+      const tauxTVA = 0.20; 
+      const montantHT = montantTTC / (1 + tauxTVA);
+      const montantTVA = montantTTC - montantHT;
+
+      const facture = {
+        facture: {
+          numero: data[i][COL["numero de facture"]],
+          date: data[i][COL["date"]],
+        },
+
+        emetteur: {
+          nom: "E.I SANDY ROYET",
+          siret: "83787015300017", 
+          adresse: "ONAE 80 imp. Thomas Alva Edisson 84120 Pertuis"
+        },
+
+        client: {
+          nom: data[i][COL["client"]],
+          email: data[i][COL["adresse emails"]],
+          adresse: data[i][COL["adresse client"]],
+        },
+
+        montant: {
+          ht: montantHT.toFixed(2),
+          tva: montantTVA.toFixed(2),
+          ttc: montantTTC.toFixed(2),
+          taux_tva: tauxTVA
+        },
+
+        paiement: {
+          mode: data[i][COL["mode paiement"]],
+          statut: data[i][6]
+        }
+      };
+
+      return JSON.stringify(facture, null, 2);
+    }
+  }
+
+  return null;
+}
+
+function telechargerJSON() {
+  const numero = getSheet(CONFIG.SHEET_RDV).getRange("T4").getValue();
+  const json = exportFactureJSON(numero);
+
+  if (!json) {
+    SpreadsheetApp.getUi().alert("Facture introuvable");
+    return;
+  }
+
+  const html = `
+    <a download="${numero}.json"
+       href="data:application/json;charset=utf-8,${encodeURIComponent(json)}">
+       Télécharger JSON
+    </a>
+    <script>document.querySelector('a').click();</script>
+  `;
+
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(html),
+    "Export JSON"
+  );
+}
+
+function getColumnMap(sheet) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  const map = {};
+
+  headers.forEach((h, i) => {
+    const key = h
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
+    map[key] = i;
+  });
+
+  return map;
 }
