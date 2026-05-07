@@ -414,7 +414,10 @@ function boutonMobile() {
 function genererNumerosFacture() {
   const sheet = getSheet(CONFIG.SHEET_RDV);
   const COL = getColumnMap(sheet);
-  const data = sheet.getRange(2, 1, sheet.getLastRow()-1, SHEET_LAYOUT.TOTAL_COLUMNS).getValues();
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const data = sheet.getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS).getValues();
 
   let compteur = 1;
 
@@ -498,6 +501,10 @@ function envoyerFacture() {
     const sheetRDV = ss.getSheetByName(CONFIG.SHEET_RDV);
     const COL = getColumnMap(sheetRDV);
     const lastRow = sheetRDV.getLastRow();
+      if (lastRow < 2) {
+        setStatus("❌ Aucun RDV trouvé", true);
+        return;
+      }
     const data = sheetRDV.getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS).getValues();
     let factureDejaEnvoyee = false;
     let eventid = null;
@@ -652,6 +659,7 @@ function updateCalendarFromSheet() {
   const sheet = getSheet(CONFIG.SHEET_RDV);
   const COL = getColumnMap(sheet);
   const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
   const data = sheet.getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS).getValues();
 
   for (let i = 0; i < data.length; i++) {
@@ -701,6 +709,10 @@ function remplirFacture() {
   if (!numero) return false;
 
   const lastRow = sheetRDV.getLastRow();
+    if (lastRow < 2) {
+    setStatus("❌ Aucun RDV trouvé", true);
+    return false;
+    }
   const data = sheetRDV.getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS).getValues();
 
   for (let i = 0; i < data.length; i++) {
@@ -722,6 +734,8 @@ function remplirFacture() {
 }
 
 function onEdit(e) {
+  // 🔒 sécurité si lancé manuellement
+  if (!e) return;
   const sheet = e.source.getActiveSheet();
 
   if (sheet.getName() === CONFIG.SHEET_RDV) {
@@ -777,6 +791,9 @@ function findContactByEmail(email) {
 
   const sheet = getSheet("Carnet");
   const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+    return null;
+    }
   const data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
 
   for (let i = 0; i < data.length; i++) {
@@ -815,6 +832,9 @@ function generateEmailContent(style, prenom, clientFallback) {
 function getContactsMap() {
   const sheet = getSheet("Carnet");
   const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+    return {};
+    }
   const data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
 
   const map = {};
