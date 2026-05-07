@@ -9,7 +9,14 @@ function importBusinessEvents() {
   
   // 🔹 1. Récupérer le fichier Google Sheets actif
   const ss = getSS();
-  
+
+  // 🔥 nettoyer les messages système
+  const statusCell = ss.getSheetByName(CONFIG.SHEET_RDV).getRange("Q4");
+
+  statusCell.clearContent();
+  statusCell.setBackground(null);
+  statusCell.setFontColor("black");
+
   // 🔹 2. Récupérer la feuille "RDV" 
   let sheet = ss.getSheetByName(CONFIG.SHEET_RDV);
   //si elle n'existe pas la créer
@@ -462,37 +469,51 @@ function envoyerFacture() {
   const COL = getColumnMap(sheetRDV);
   const lastRow = sheetRDV.getLastRow();
   const data = sheetRDV.getRange(2, 1, lastRow - 1, 16).getValues();
-  
+  let factureDejaEnvoyee = false;
   let eventid = null;
   let style = "vouvoiement";
   let prenom = client;
 
   for (let i = 0; i < data.length; i++) {
-    if (data[i][COL["numero de facture"]] === numerofacture) { // colonne facture
-      eventid = data[i][COL["eventid"]];             // colonne eventid
-      style = data[i][COL["style"]];     
-      prenom = data[i][COL["client"]]; 
+
+    if (data[i][COL["numero de facture"]] === numerofacture) {
+
+      eventid = data[i][COL["eventid"]];
+      style = data[i][COL["style"]];
+      prenom = data[i][COL["client"]];
+
+      // 🔒 sécurité anti double envoi
+      if (data[i][COL["facture envoyee"]] === "oui") {
+        factureDejaEnvoyee = true;
+      }
+
       break;
     }
   }
 
   if (!email) {
-    SpreadsheetApp.getUi().alert("Email manquant");
+    setStatus("❌ Email manquant", true);
     return;
   }
 
   if (!email.includes("@")) {
-    SpreadsheetApp.getUi().alert("Email invalide");
+    setStatus("❌ Email invalide", true);
     return;
   }
   const pdf = genererPDF();
 
   if (!pdf) {
-  SpreadsheetApp.getUi().alert("Erreur génération PDF");
+  setStatus("❌ Erreur génération PDF", true);
   return;
   }
   const message = generateEmailContent(style, prenom, client);
 
+  if (factureDejaEnvoyee) {
+
+    setStatus("❌ Cette facture a déjà été envoyée.",true);
+
+    return;
+  }
   MailApp.sendEmail({
     to: email,
     subject: "Facture " + numerofacture,
@@ -514,6 +535,7 @@ function envoyerFacture() {
     }
   }
   updateCalendarFromSheet();
+  setStatus("✅ Facture envoyée");
 }
 
 function suiviHypnoJ15() {
@@ -625,14 +647,6 @@ function remplirFacture() {
   for (let i = 0; i < data.length; i++) {
     if (data[i][COL["numero de facture"]] === numero) {
 
-      // 🔒 FACTURE DÉJÀ ENVOYÉE
-      if (data[i][COL["facture envoyee"]] === "oui") {
-        SpreadsheetApp.getUi().alert(
-          "Cette facture a déjà été envoyée et ne peut plus être modifiée."
-        );
-        return false;
-      }
-
       sheetFacture.getRange("F4").setValue(data[i][COL["client"]]); // Client
       sheetFacture.getRange("F5").setValue(data[i][COL["date"]]); // Date
       sheetFacture.getRange("F6").setValue(data[i][COL["numero de facture"]]); // Numero de Facture
@@ -644,7 +658,7 @@ function remplirFacture() {
     }
   }
 
-  SpreadsheetApp.getUi().alert("Facture introuvable");
+  setStatus("❌ Facture introuvable", true);
   return false;
 }
 
@@ -863,7 +877,7 @@ function telechargerJSON() {
   const json = exportFactureJSON(numero);
 
   if (!json) {
-    SpreadsheetApp.getUi().alert("Facture introuvable");
+    setStatus("❌ Facture introuvable", true);
     return;
   }
 
@@ -897,4 +911,20 @@ function getColumnMap(sheet) {
   });
 
   return map;
+}
+
+function setStatus(message, isError = false) {
+
+  const sheet = getSheet(CONFIG.SHEET_RDV);
+
+  const cell = sheet.getRange("Q4");
+
+  cell.setValue(message)
+      .setFontWeight("bold");
+
+  if (isError) {
+    cell.setFontColor("red");
+  } else {
+    cell.setFontColor("green");
+  }
 }
