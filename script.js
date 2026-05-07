@@ -354,9 +354,16 @@ function boutonMobile() {
       const value = sheet.getRange(action.cell).getValue();
 
       if (value === true || value === "TRUE") {
-        action.func();
-        sheet.getRange(action.cell).setValue(false);
-      }
+
+          try {
+            action.func();
+
+          } finally {
+
+            // 🔥 décoche TOUJOURS
+            sheet.getRange(action.cell).setValue(false);
+          }
+        }
     } catch (error) {
       console.log(`Erreur ${action.cell}: ${error}`);
     }
@@ -438,8 +445,11 @@ function genererPDF() {
   return blob;
 }
 function envoyerFacture() {
-  
-  remplirFacture(); // 🔥 garantit que tout est à jour
+  const factureOk = remplirFacture();
+
+  if (!factureOk) {
+    return;
+  }
   SpreadsheetApp.flush();
   const ss = getSS();
   const sheetFacture = ss.getSheetByName(CONFIG.SHEET_FACTURE);
@@ -471,6 +481,10 @@ function envoyerFacture() {
     return;
   }
 
+  if (!email.includes("@")) {
+    SpreadsheetApp.getUi().alert("Email invalide");
+    return;
+  }
   const pdf = genererPDF();
 
   if (!pdf) {
@@ -603,13 +617,21 @@ function remplirFacture() {
   const COL = getColumnMap(sheetRDV);
 
   const numero = sheetRDV.getRange("T4").getValue();
-  if (!numero) return;
+  if (!numero) return false;
 
   const lastRow = sheetRDV.getLastRow();
   const data = sheetRDV.getRange(2, 1, lastRow - 1, 16).getValues();
 
   for (let i = 0; i < data.length; i++) {
     if (data[i][COL["numero de facture"]] === numero) {
+
+      // 🔒 FACTURE DÉJÀ ENVOYÉE
+      if (data[i][COL["facture envoyee"]] === "oui") {
+        SpreadsheetApp.getUi().alert(
+          "Cette facture a déjà été envoyée et ne peut plus être modifiée."
+        );
+        return false;
+      }
 
       sheetFacture.getRange("F4").setValue(data[i][COL["client"]]); // Client
       sheetFacture.getRange("F5").setValue(data[i][COL["date"]]); // Date
@@ -618,11 +640,12 @@ function remplirFacture() {
       sheetFacture.getRange("F25").setValue(data[i][COL["mode paiement"]]); // type de paiment
       sheetFacture.getRange("J6").setValue(data[i][COL["adresse emails"]]); // Email
 
-      return;
+      return true;
     }
   }
 
   SpreadsheetApp.getUi().alert("Facture introuvable");
+  return false;
 }
 
 function onEdit(e) {
