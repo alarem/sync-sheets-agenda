@@ -412,40 +412,73 @@ function boutonMobile() {
 
 // 🔹 Permet de générer un Numero de Facture
 function genererNumerosFacture() {
+
   const sheet = getSheet(CONFIG.SHEET_RDV);
   const COL = getColumnMap(sheet);
 
   const lastRow = sheet.getLastRow();
+
   if (lastRow < 2) return;
-  const data = sheet.getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS).getValues();
+
+  const data = sheet
+    .getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS)
+    .getValues();
+
+  const updates = [];
+
+  // 🔥 stocke les numéros déjà utilisés
+  const numerosExistants = new Set();
+
+  // 🔹 récupérer tous les numéros déjà présents
+  for (let i = 0; i < data.length; i++) {
+
+    const numero = data[i][COL["numero de facture"]];
+
+    if (numero) {
+      numerosExistants.add(numero);
+    }
+  }
 
   let compteur = 1;
-
-  const updates = []; // 🔥 tableau pour stocker les résultats
 
   for (let i = 0; i < data.length; i++) {
 
     const metier = data[i][COL["metier"]];
     const date = data[i][COL["date"]];
-    const numeroExistant = data[i][COL["numero de facture"]];
+    let numeroFacture = data[i][COL["numero de facture"]];
 
-    let numerofacture = numeroExistant; 
-
-    // 🔒 SI déjà un numéro → on garde
-    if (!numeroExistant && metier === "Hypno" && date) {
-
-      const year = new Date(date).getFullYear();
-      const numero = String(compteur).padStart(3, "0");
-
-      numerofacture = `HYP-${year}-${numero}`;
-      compteur++;
+    // 🔒 garder le numéro existant
+    if (numeroFacture) {
+      updates.push([numeroFacture]);
+      continue;
     }
 
-    updates.push([numerofacture]); // 🔥 on stocke
+    // 🔹 seulement Hypno
+    if (metier === "Hypno" && date) {
+
+      const year = new Date(date).getFullYear();
+
+      // 🔥 chercher un numéro libre
+      do {
+
+        const numero = String(compteur).padStart(3, "0");
+
+        numeroFacture = `HYP-${year}-${numero}`;
+
+        compteur++;
+
+      } while (numerosExistants.has(numeroFacture));
+
+      numerosExistants.add(numeroFacture);
+    }
+
+    updates.push([numeroFacture]);
   }
 
   // 🔥 UNE SEULE écriture
-  sheet.getRange(2, SHEET_LAYOUT.FACTURE_COLUMN, updates.length, 1).setValues(updates);
+  sheet
+    .getRange(2, SHEET_LAYOUT.FACTURE_COLUMN, updates.length, 1)
+    .setValues(updates);
 }
 
 // 🔹 Permet de générer une facture en PDF et de l'enregistrer dans le drive
@@ -1008,5 +1041,50 @@ function setStatus(message, isError = false) {
   }
 }
 function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  if (!email) return false;
+
+  // 🔹 séparer les emails par virgule
+  const emails = email.split(",");
+
+  // 🔹 vérifier chaque email
+  return emails.every(e => {
+
+    const cleanEmail = e.trim();
+
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail);
+  });
+}
+// 🔹 Création automatique des triggers
+function installerTriggers() {
+
+  // 🔥 supprimer anciens triggers pour éviter doublons
+  const triggers = ScriptApp.getProjectTriggers();
+
+  triggers.forEach(trigger => {
+
+    const name = trigger.getHandlerFunction();
+
+    if (
+      name === "importBusinessEvents" ||
+      name === "suiviHypnoJ15"
+    ) {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  // 🔹 Sync agenda toutes les heures
+  ScriptApp.newTrigger("importBusinessEvents")
+    .timeBased()
+    .everyHours(1)
+    .create();
+
+  // 🔹 Vérification suivi hypno tous les jours à 9h
+  ScriptApp.newTrigger("suiviHypnoJ15")
+    .timeBased()
+    .everyDays(1)
+    .atHour(9)
+    .create();
+
+  Logger.log("Triggers installés !");
 }
