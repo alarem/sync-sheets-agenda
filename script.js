@@ -258,7 +258,16 @@ function importBusinessEvents() {
         const matchAdresse = description.match(/adresse\s*:\s*(.+)/i);
 
         if (matchAdresse) {
-          adresse = matchAdresse[1].trim();
+
+          adresse = matchAdresse[1]
+            .replace(/\s+/g, " ")
+            .trim();
+
+          // 🔥 nettoyage sécurité
+          adresse = adresse.replace(
+            /(facture envoyee|suivi envoye|paye|payee)$/i,
+            ""
+          ).trim();
         }
 
         // 🔥 PRIORITÉ 2 : carnet
