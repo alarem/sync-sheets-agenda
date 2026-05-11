@@ -112,8 +112,10 @@ function importBusinessEvents() {
       if (seenEvents.has(eventid)) return;
       seenEvents.add(eventid);
       
-      const title = event.getTitle() || "";           // ex: HYPNO Dupont - Séance
-      const description = event.getDescription() || ""; //  || "" évite les crash si déscription vide
+      const rawTitle = event.getTitle() || "";
+      const rawDescription = event.getDescription() || "";
+      const title = sanitizeText(rawTitle);
+      const description = sanitizeText(rawDescription);
       const desc = description
       .toLowerCase()
       .normalize("NFD")
@@ -208,7 +210,7 @@ function importBusinessEvents() {
       );
 
       // 🔸 14. Extraire le montant depuis la description
-      let montant = extractMontant(description);
+      let montant = extractMontant(rawDescription);
 
       // 🔸 15. Détecter le mode de paiement
       let modepaiement = "";
@@ -239,14 +241,14 @@ function importBusinessEvents() {
 
       // 🔸 17. Détecter les numéros de téléphones
       
-      const phonesRaw = description.match(/\b(?:\+33|0)[1-9](?:[\s.-]?\d{2}){4}\b/g) || [];
+      const phonesRaw = rawDescription.match(/\b(?:\+33|0)[1-9](?:[\s.-]?\d{2}){4}\b/g) || [];
 
       const phones = phonesRaw.map(p =>
         p.replace(/\s|\./g, "").replace(/^0/, "+33")
       ).join(", ");
 
       // 🔸 Détecter les numéros adresse mails
-      const emails = (description.match(
+      const emails = (rawDescription.match(
       /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
       ) || []).join(", ");
 
@@ -255,7 +257,7 @@ function importBusinessEvents() {
         let adresse = "";
 
         // 🔥 PRIORITÉ 1 : description
-        const matchAdresse = description.match(/adresse\s*:\s*(.+)/i);
+        const matchAdresse = rawDescription.match(/adresse\s*:\s*([^\n\r]+)/i);
 
         if (matchAdresse) {
 
@@ -299,7 +301,7 @@ function importBusinessEvents() {
       // 🔸 20. créer le Numero de Facture à partir de la date et de l'heure
       let numerofacture = "";
       // 🔍 chercher un numéro type HYP-2026-001
-      const matchFacture = description.match(/\b[A-Z]{2,5}[-_ ]?\d{4}[-_ ]?\d{1,4}\b/i);
+      const matchFacture = rawDescription.match(/\b[A-Z]{2,5}[-_ ]?\d{4}[-_ ]?\d{1,4}\b/i);
 
       if (matchFacture) {
         numerofacture = matchFacture[0].toUpperCase();
@@ -340,7 +342,7 @@ function importBusinessEvents() {
     sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
 
     // 🔥 Mise à jour de lastRow
-    lastRow += rows.length;
+    //lastRow += rows.length;
     }
 
     console.log("Import terminé !");
@@ -537,7 +539,8 @@ function envoyerFacture() {
     const sheetFacture = ss.getSheetByName(CONFIG.SHEET_FACTURE);
     const contactsMap = getContactsMap();
     const numerofacture = sheetFacture.getRange(CELLS.FACTURE_NUMERO).getValue();
-    const email = sheetFacture.getRange(CELLS.FACTURE_EMAIL).getValue(); // adapte selon ta cellule
+    const emailRaw = sheetFacture.getRange(CELLS.FACTURE_EMAIL).getValue();
+    const email = emailRaw.split(",")[0].trim();
     const client = sheetFacture.getRange(CELLS.FACTURE_CLIENT).getValue();
 
     const sheetRDV = ss.getSheetByName(CONFIG.SHEET_RDV);
@@ -810,7 +813,14 @@ function getSignatureHtml() {
     </table>
   `;
 }
+function safeString(value) {
 
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return value.toString().trim();
+}
 function getSheet(name) {
   return getSS().getSheetByName(name);
 }
@@ -820,6 +830,7 @@ function getSS() {
 }
 
 function extractMontant(description) {
+  description = safeString(description);
   const matches = description.match(/(\d+(?:[.,]\d+)?)\s*(€|eur|euros?)/gi);
   if (!matches) return 0;
 
@@ -902,7 +913,8 @@ function getContactsMap() {
 
 function generateSuiviContent(email, nom, contactsMap) {
 
-  const contact = contactsMap[email.toLowerCase()];
+  email = safeString(email).toLowerCase();
+  const contact = contactsMap[email];
 
   if (contact && contact.style === "tutoiement") {
     return `
@@ -1050,7 +1062,7 @@ function setStatus(message, isError = false) {
   }
 }
 function isValidEmail(email) {
-
+  email = safeString(email);
   if (!email) return false;
 
   // 🔹 séparer les emails par virgule
@@ -1096,4 +1108,12 @@ function installerTriggers() {
     .create();
 
   Logger.log("Triggers installés !");
+}
+function sanitizeText(text) {
+
+  text = safeString(text);
+
+  return text
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .trim();
 }
