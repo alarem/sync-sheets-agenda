@@ -1,6 +1,7 @@
 const CONFIG = {
   SHEET_RDV: "RDV",
   SHEET_FACTURE: "Facture",
+  SHEET_CONFIG: "CONFIG"
 };
 
 const CELLS = {
@@ -9,15 +10,17 @@ const CELLS = {
   FACTURE_CLIENT: "F4",
   FACTURE_DATE: "F5",
   FACTURE_MONTANT: "E19",
-  FACTURE_MODE_PAIEMENT: "F25",
-  RDV_NUMERO_RECHERCHE: "Z4",
-  STATUS_CELL: "X6",
-  LAST_UPDATE_CELL: "X5",
-
-  BOUTON_SYNC: "Y3",
-  BOUTON_FACTURE: "Y4"
+  FACTURE_MODE_PAIEMENT: "F25"
 };
 
+const CONFIG_CELLS = {
+  RDV_NUMERO_RECHERCHE: "C2",
+  STATUS_CELL: "A4",
+  LAST_UPDATE_CELL: "A3",
+
+  BOUTON_SYNC: "B1",
+  BOUTON_FACTURE: "B2"
+};
 const STATUS = {
   OUI: "oui",
   NON: "non"
@@ -29,11 +32,34 @@ const CALENDAR_TAGS = {
 };
 
 const SHEET_LAYOUT = {
-  TOTAL_COLUMNS: 22,
   EVENT_ID_COLUMN: 21,
-  FACTURE_COLUMN: 18,
-  SUIVI_COLUMN: 20
+  SUIVI_COLUMN: 22,
+  HEADERS: [
+    "metier",
+    "client",
+    "date",
+    "mois",
+    "heure",
+    "montant",
+    "paye",
+    "mode paiement",
+    "n° de telephones",
+    "adresse client",
+    "adresse emails",
+    "type client",
+    "siren client",
+    "siret client",
+    "tva client",
+    "pays client",
+    "date echeance",
+    "numero de facture",
+    "facture envoyee",
+    "suivi 15j",
+    "eventid",
+    "style"
+  ]
 };
+const TOTAL_COLUMNS = SHEET_LAYOUT.HEADERS.length;
 
 //fonction principale
 function importBusinessEvents() {
@@ -45,7 +71,7 @@ function importBusinessEvents() {
     const ss = getSS();
 
     // 🔥 nettoyer les messages système
-    const statusCell = ss.getSheetByName(CONFIG.SHEET_RDV).getRange(CELLS.STATUS_CELL);
+    const statusCell = ss.getSheetByName(CONFIG.SHEET_CONFIG).getRange(CONFIG_CELLS.STATUS_CELL);
 
     statusCell.clearContent();
     statusCell.setBackground(null);
@@ -59,30 +85,7 @@ function importBusinessEvents() {
     }
 
     // 🔥 toujours garantir les entêtes
-    const headers = [
-      "metier",
-      "client",
-      "date",
-      "mois",
-      "heure",
-      "montant",
-      "paye",                // 07 → index 06
-      "mode paiement",       // 08 → index 07
-      "n° de telephones",    // 09 → index 08
-      "adresse client",      // 10 → index 09
-      "adresse emails",      // 11 → index 10
-      "type client",
-      "siren client",
-      "siret client",
-      "tva client",
-      "pays client",
-      "date echeance",
-      "numero de facture",   
-      "facture envoyee",     
-      "suivi 15j",         
-      "eventid",           
-      "style"                
-    ];
+    const headers = SHEET_LAYOUT.HEADERS;
 
     // 🔥 FORCER les headers à chaque exécution
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
@@ -90,7 +93,7 @@ function importBusinessEvents() {
     let lastRow = sheet.getLastRow();
 
     if (lastRow > 1) {
-      sheet.getRange(2, 1, lastRow - 1, 11).clearContent();
+      sheet.getRange(2, 1, lastRow - 1, TOTAL_COLUMNS).clearContent();
     }
 
     // 🔹 5. Choisir l'agenda
@@ -333,7 +336,7 @@ function importBusinessEvents() {
       }
 
       let tvaClient = "";
-      const matchTVA = rawDescription.match(/\b[A-Z]{2}[A-Z0-9]{2,12}\b/);
+      const matchTVA = rawDescription.match(/\b(FR|BE|DE|IT|ES|LU|NL)[A-Z0-9]{2,12}\b/);
       if (matchTVA) {
         tvaClient = matchTVA[0];
       }
@@ -412,20 +415,22 @@ function importBusinessEvents() {
     if (rows.length > 0) {
       const finalLastRow = rows.length + 1;
 
-      const dataRange = sheet.getRange(2, 1, finalLastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS);
+      const dataRange = sheet.getRange(2, 1, finalLastRow - 1, TOTAL_COLUMNS);
       dataRange.sort([{column: 3, ascending: true}, {column: 5, ascending: true}]);
     }
 
     genererNumerosFacture();
 
     // 🔹 Affiche la dernière mise à jour
-    sheet.getRange(CELLS.LAST_UPDATE_CELL)
+    getSheet(CONFIG.SHEET_CONFIG).getRange(CONFIG_CELLS.LAST_UPDATE_CELL)
     .setValue("Dernière mise à jour : " + now)
     .setFontWeight("bold");
 
-    // 🔹 Permet de cacher la colonne avec les log google
-    if (!sheet.isColumnHiddenByUser(SHEET_LAYOUT.EVENT_ID_COLUMN)) {
-      sheet.hideColumns(SHEET_LAYOUT.EVENT_ID_COLUMN);
+    const COL = getColumnMap(sheet);
+    const eventIdColumn = COL["eventid"] + 1;
+
+    if (!sheet.isColumnHiddenByUser(eventIdColumn)) {
+      sheet.hideColumns(eventIdColumn);
     }
   } finally {
     lock.releaseLock();
@@ -449,11 +454,11 @@ function onOpen() {
 
  // 🔹 Permet de lancer la fonction principale (importBusinessEvents) à partir de la case à cocher
 function boutonMobile() {
-  const sheet = getSheet(CONFIG.SHEET_RDV);
+  const sheet = getSheet(CONFIG.SHEET_CONFIG);
 
   const actions = [
-    { cell: CELLS.BOUTON_SYNC, func: importBusinessEvents },
-    { cell: CELLS.BOUTON_FACTURE, func: envoyerFacture }
+    { cell: CONFIG_CELLS.BOUTON_SYNC, func: importBusinessEvents },
+    { cell: CONFIG_CELLS.BOUTON_FACTURE, func: envoyerFacture }
   ];
 
   actions.forEach(action => {
@@ -488,7 +493,7 @@ function genererNumerosFacture() {
   if (lastRow < 2) return;
 
   const data = sheet
-    .getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS)
+    .getRange(2, 1, lastRow - 1, TOTAL_COLUMNS)
     .getValues();
 
   const updates = [];
@@ -544,7 +549,7 @@ function genererNumerosFacture() {
 
   // 🔥 UNE SEULE écriture
   sheet
-    .getRange(2, SHEET_LAYOUT.FACTURE_COLUMN, updates.length, 1)
+    .getRange(2, COL["numero de facture"] + 1, updates.length, 1)
     .setValues(updates);
 }
 
@@ -606,7 +611,7 @@ function envoyerFacture() {
         setStatus("❌ Aucun RDV trouvé", true);
         return;
       }
-    const data = sheetRDV.getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS).getValues();
+    const data = sheetRDV.getRange(2, 1, lastRow - 1, TOTAL_COLUMNS).getValues();
     let factureDejaEnvoyee = false;
     let eventid = null;
     let style = "vouvoiement";
@@ -703,7 +708,7 @@ function suiviHypnoJ15() {
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return;
 
-    const data = sheet.getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS).getValues();
+    const data = sheet.getRange(2, 1, lastRow - 1, TOTAL_COLUMNS).getValues();
     const today = new Date();
     const contactsMap = getContactsMap();
     
@@ -761,7 +766,7 @@ function updateCalendarFromSheet() {
   const COL = getColumnMap(sheet);
   const lastRow = sheet.getLastRow();
     if (lastRow < 2) return;
-  const data = sheet.getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, TOTAL_COLUMNS).getValues();
 
   for (let i = 0; i < data.length; i++) {
 
@@ -806,7 +811,7 @@ function remplirFacture() {
   const sheetRDV = ss.getSheetByName(CONFIG.SHEET_RDV);
   const COL = getColumnMap(sheetRDV);
 
-  const numero = sheetRDV.getRange(CELLS.RDV_NUMERO_RECHERCHE).getValue();
+  const numero = getSheet(CONFIG.SHEET_CONFIG).getRange(CONFIG_CELLS.RDV_NUMERO_RECHERCHE).getValue();
   if (!numero) return false;
 
   const lastRow = sheetRDV.getLastRow();
@@ -814,7 +819,7 @@ function remplirFacture() {
     setStatus("❌ Aucun RDV trouvé", true);
     return false;
     }
-  const data = sheetRDV.getRange(2, 1, lastRow - 1, SHEET_LAYOUT.TOTAL_COLUMNS).getValues();
+  const data = sheetRDV.getRange(2, 1, lastRow - 1, TOTAL_COLUMNS).getValues();
 
   for (let i = 0; i < data.length; i++) {
     if (data[i][COL["numero de facture"]] === numero) {
@@ -839,10 +844,10 @@ function onEdit(e) {
   if (!e) return;
   const sheet = e.source.getActiveSheet();
 
-  if (sheet.getName() === CONFIG.SHEET_RDV) {
+  if (sheet.getName() === CONFIG.SHEET_CONFIG) {
 
     // 🔹 Si tu changes le numéro → auto
-    if (e.range.getA1Notation() === CELLS.RDV_NUMERO_RECHERCHE) {
+    if (e.range.getA1Notation() === CONFIG_CELLS.RDV_NUMERO_RECHERCHE) {
       remplirFacture();
       SpreadsheetApp.flush();
     }
@@ -1097,7 +1102,7 @@ function exportFactureJSON(numerofacture) {
 }
 
 function telechargerJSON() {
-  const numero = getSheet(CONFIG.SHEET_RDV).getRange(CELLS.RDV_NUMERO_RECHERCHE).getValue();
+  const numero = getSheet(CONFIG.SHEET_CONFIG).getRange(CELLS.RDV_NUMERO_RECHERCHE).getValue();
   const json = exportFactureJSON(numero);
 
   if (!json) {
@@ -1146,9 +1151,9 @@ function getColumnMap(sheet) {
 
 function setStatus(message, isError = false) {
 
-  const sheet = getSheet(CONFIG.SHEET_RDV);
+  const sheet = getSheet(CONFIG.SHEET_CONFIG);
 
-  const cell = sheet.getRange(CELLS.STATUS_CELL);
+  const cell = sheet.getRange(CONFIG_CELLS.STATUS_CELL);
 
   cell.setValue(message)
       .setFontWeight("bold");
