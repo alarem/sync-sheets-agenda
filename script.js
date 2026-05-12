@@ -10,12 +10,12 @@ const CELLS = {
   FACTURE_DATE: "F5",
   FACTURE_MONTANT: "E19",
   FACTURE_MODE_PAIEMENT: "F25",
-  RDV_NUMERO_RECHERCHE: "Y4",
-  STATUS_CELL: "W6",
-  LAST_UPDATE_CELL: "W5",
+  RDV_NUMERO_RECHERCHE: "Z4",
+  STATUS_CELL: "X6",
+  LAST_UPDATE_CELL: "X5",
 
-  BOUTON_SYNC: "X3",
-  BOUTON_FACTURE: "X4"
+  BOUTON_SYNC: "Y3",
+  BOUTON_FACTURE: "Y4"
 };
 
 const STATUS = {
@@ -29,9 +29,10 @@ const CALENDAR_TAGS = {
 };
 
 const SHEET_LAYOUT = {
-  TOTAL_COLUMNS: 21,
-  EVENT_ID_COLUMN: 20,
-  FACTURE_COLUMN: 17
+  TOTAL_COLUMNS: 22,
+  EVENT_ID_COLUMN: 21,
+  FACTURE_COLUMN: 18,
+  SUIVI_COLUMN: 20
 };
 
 //fonction principale
@@ -72,6 +73,7 @@ function importBusinessEvents() {
       "adresse emails",      // 11 → index 10
       "type client",
       "siren client",
+      "siret client",
       "tva client",
       "pays client",
       "date echeance",
@@ -312,9 +314,22 @@ function importBusinessEvents() {
       }
 
       let sirenClient = "";
-      const matchSiren = rawDescription.match(/\b\d{9}\b/);
-      if (matchSiren) {
-        sirenClient = matchSiren[0];
+      let siretClient = "";
+
+      // 🔹 SIRET prioritaire (14 chiffres)
+      const matchSiret = rawDescription.match(/\b\d{14}\b/);
+
+      if (matchSiret) {
+        siretClient = matchSiret[0];
+        sirenClient = siretClient.substring(0, 9);
+      } else {
+
+        // 🔹 sinon SIREN seul
+        const matchSiren = rawDescription.match(/\b\d{9}\b/);
+
+        if (matchSiren) {
+          sirenClient = matchSiren[0];
+        }
       }
 
       let tvaClient = "";
@@ -357,6 +372,7 @@ function importBusinessEvents() {
         emails,
         typeClient,
         sirenClient,
+        siretClient,
         tvaClient,
         paysClient,
         dateEcheance,
@@ -536,6 +552,7 @@ function genererNumerosFacture() {
 function genererPDF() {
   remplirFacture();
   SpreadsheetApp.flush();
+  Utilities.sleep(1500);
   const ss = getSS();
   const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
   const numerofacture = sheet.getRange(CELLS.FACTURE_NUMERO).getValue();
@@ -577,7 +594,6 @@ function envoyerFacture() {
     SpreadsheetApp.flush();
     const ss = getSS();
     const sheetFacture = ss.getSheetByName(CONFIG.SHEET_FACTURE);
-    const contactsMap = getContactsMap();
     const numerofacture = sheetFacture.getRange(CELLS.FACTURE_NUMERO).getValue();
     const emailRaw = sheetFacture.getRange(CELLS.FACTURE_EMAIL).getValue();
     const email = emailRaw.split(",")[0].trim();
@@ -1010,13 +1026,19 @@ function exportFactureJSON(numerofacture) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][COL["numero de facture"]] === numerofacture) {
 
-      const montantTTC = data[i][COL["montant"]];
-      const tauxTVA = 0; 
-      const montantHT = montantTTC / (1 + tauxTVA);
-      const montantTVA = montantTTC - montantHT;
+      const montantTTC = Number(data[i][COL["montant"]]) || 0;
+      // 🔹 Micro-entreprise = TVA à 0
+      const tauxTVA = 0;
+      const montantHT = montantTTC;
+      const montantTVA = 0;
 
       const facture = {
         facture: {
+          type_document: "FACTURE",
+          standard: "Factur-X",
+          version: "1.0",
+          uuid: Utilities.getUuid(),
+          generated_at: new Date().toISOString(),          
           numero: data[i][COL["numero de facture"]],
           date: data[i][COL["date"]],
           format: "Factur-X-ready",
@@ -1026,6 +1048,7 @@ function exportFactureJSON(numerofacture) {
 
         emetteur: {
           nom: "E.I SANDY ROYET",
+          pays: "FR",
           siret: "83787015300017", 
           adresse: "ONAE 80 imp. Thomas Alva Edisson 84120 Pertuis"
         },
@@ -1034,8 +1057,11 @@ function exportFactureJSON(numerofacture) {
           nom: data[i][COL["client"]],
           email: data[i][COL["adresse emails"]],
           adresse: data[i][COL["adresse client"]],
-          type: data[i][COL["type client"]],
+          type: data[i][COL["type client"]] === "professionnel"
+          ? "B2B"
+          : "B2C",
           siren: data[i][COL["siren client"]],
+          siret: data[i][COL["siret client"]],
           tva: data[i][COL["tva client"]],
           pays: data[i][COL["pays client"]],
         },
@@ -1045,9 +1071,18 @@ function exportFactureJSON(numerofacture) {
           tva: montantTVA.toFixed(2),
           ttc: montantTTC.toFixed(2),
           taux_tva: tauxTVA,
+          code_tva: "E",
           mention_tva: "TVA non applicable - article 293 B du CGI"
-        },
-
+        },        
+        lignes: [
+          {
+            description: "Séance hypnose",
+            quantite: 1,
+            prix_unitaire_ht: montantHT.toFixed(2),
+            total_ht: montantHT.toFixed(2),
+            tva: 0
+          }
+        ],
         paiement: {
           mode: data[i][COL["mode paiement"]],
           statut: data[i][6]
