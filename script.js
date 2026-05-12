@@ -10,9 +10,12 @@ const CELLS = {
   FACTURE_DATE: "F5",
   FACTURE_MONTANT: "E19",
   FACTURE_MODE_PAIEMENT: "F25",
-  RDV_NUMERO_RECHERCHE: "T4",
-  STATUS_CELL: "Q4",
-  LAST_UPDATE_CELL: "Q2"
+  RDV_NUMERO_RECHERCHE: "Y4",
+  STATUS_CELL: "W6",
+  LAST_UPDATE_CELL: "W5",
+
+  BOUTON_SYNC: "X3",
+  BOUTON_FACTURE: "X4"
 };
 
 const STATUS = {
@@ -26,9 +29,9 @@ const CALENDAR_TAGS = {
 };
 
 const SHEET_LAYOUT = {
-  TOTAL_COLUMNS: 16,
-  EVENT_ID_COLUMN: 15,
-  FACTURE_COLUMN: 12
+  TOTAL_COLUMNS: 21,
+  EVENT_ID_COLUMN: 20,
+  FACTURE_COLUMN: 17
 };
 
 //fonction principale
@@ -67,11 +70,16 @@ function importBusinessEvents() {
       "n° de telephones",    // 09 → index 08
       "adresse client",      // 10 → index 09
       "adresse emails",      // 11 → index 10
-      "numero de facture",   // 12 → index 11
-      "facture envoyee",     // 13 → index 12
-      "suivi 15j",           // 14 → index 13
-      "eventid",             // 15 → index 14
-      "style"                // 16 → index 15
+      "type client",
+      "siren client",
+      "tva client",
+      "pays client",
+      "date echeance",
+      "numero de facture",   
+      "facture envoyee",     
+      "suivi 15j",         
+      "eventid",           
+      "style"                
     ];
 
     // 🔥 FORCER les headers à chaque exécution
@@ -298,7 +306,34 @@ function importBusinessEvents() {
         }
       }
 
-      // 🔸 20. créer le Numero de Facture à partir de la date et de l'heure
+      let typeClient = "particulier";
+      if (/\bsarl\b|\bsas\b|\beurl\b|\bsasu\b|\bentreprise\b/i.test(desc)) {
+        typeClient = "professionnel";
+      }
+
+      let sirenClient = "";
+      const matchSiren = rawDescription.match(/\b\d{9}\b/);
+      if (matchSiren) {
+        sirenClient = matchSiren[0];
+      }
+
+      let tvaClient = "";
+      const matchTVA = rawDescription.match(/\b[A-Z]{2}[A-Z0-9]{2,12}\b/);
+      if (matchTVA) {
+        tvaClient = matchTVA[0];
+      }
+
+      let paysClient = "FR";
+      let dateEcheance = "";
+      const echeance = new Date(start);
+      echeance.setDate(echeance.getDate() + 30);
+
+      dateEcheance = Utilities.formatDate(
+        echeance,
+        Session.getScriptTimeZone(),
+        "yyyy-MM-dd"
+      );
+
       let numerofacture = "";
       // 🔍 chercher un numéro type HYP-2026-001
       const matchFacture = rawDescription.match(/\b[A-Z]{2,5}[-_ ]?\d{4}[-_ ]?\d{1,4}\b/i);
@@ -307,7 +342,7 @@ function importBusinessEvents() {
         numerofacture = matchFacture[0].toUpperCase();
       }
 
-      // 🔸 21. Ajouter au tableau 
+      // 🔸 Ajouter au tableau 
       rows.push([
         metier,
         client,
@@ -320,6 +355,11 @@ function importBusinessEvents() {
         phones,
         adresse,
         emails,
+        typeClient,
+        sirenClient,
+        tvaClient,
+        paysClient,
+        dateEcheance,
         numerofacture,
         factureenvoyee,
         suivienvoye,
@@ -362,13 +402,13 @@ function importBusinessEvents() {
 
     genererNumerosFacture();
 
-    // 🔹 Permet d'écrire "Dernière mise à jour : " dans la case P2
+    // 🔹 Affiche la dernière mise à jour
     sheet.getRange(CELLS.LAST_UPDATE_CELL)
     .setValue("Dernière mise à jour : " + now)
     .setFontWeight("bold");
 
     // 🔹 Permet de cacher la colonne avec les log google
-    if (!sheet.isColumnHiddenByUser(15)) {
+    if (!sheet.isColumnHiddenByUser(SHEET_LAYOUT.EVENT_ID_COLUMN)) {
       sheet.hideColumns(SHEET_LAYOUT.EVENT_ID_COLUMN);
     }
   } finally {
@@ -396,8 +436,8 @@ function boutonMobile() {
   const sheet = getSheet(CONFIG.SHEET_RDV);
 
   const actions = [
-    { cell: "S3", func: importBusinessEvents },
-    { cell: "S4", func: envoyerFacture }
+    { cell: CELLS.BOUTON_SYNC, func: importBusinessEvents },
+    { cell: CELLS.BOUTON_FACTURE, func: envoyerFacture }
   ];
 
   actions.forEach(action => {
@@ -498,7 +538,6 @@ function genererPDF() {
   SpreadsheetApp.flush();
   const ss = getSS();
   const sheet = ss.getSheetByName(CONFIG.SHEET_FACTURE);
-  const COL = getColumnMap(sheet);
   const numerofacture = sheet.getRange(CELLS.FACTURE_NUMERO).getValue();
 
   if (!numerofacture) {
@@ -519,7 +558,8 @@ function genererPDF() {
 
   const blob = UrlFetchApp.fetch(exportUrl, {
     headers: { Authorization: "Bearer " + token },
-    muteHttpExceptions: true
+    muteHttpExceptions: true,
+    followRedirects: true
   }).getBlob().setName(numerofacture + ".pdf");
 
   return blob;
@@ -936,22 +976,30 @@ function generateSuiviContent(email, nom, contactsMap) {
   `;
 }
 function telechargerPDF() {
+
   const pdf = genererPDF();
 
-  const base64 = Utilities.base64Encode(pdf.getBytes());
+  const file = DriveApp.createFile(pdf);
+
+  const url = file.getDownloadUrl();
+
   const html = `
     <html>
-      <body>
-        <a download="${pdf.getName()}" href="data:application/pdf;base64,${base64}">
-          Télécharger la facture
-        </a>
-        <script>document.querySelector('a').click();</script>
-      </body>
+      <script>
+        window.open("${url}");
+        google.script.host.close();
+      </script>
     </html>
   `;
 
-  const ui = HtmlService.createHtmlOutput(html).setWidth(11).setHeight(11);
-  SpreadsheetApp.getUi().showModalDialog(ui, "Téléchargement...");
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(html),
+    "Téléchargement PDF"
+  );
+
+  Utilities.sleep(5000);
+
+  file.setTrashed(true);
 }
 
 function exportFactureJSON(numerofacture) {
@@ -963,7 +1011,7 @@ function exportFactureJSON(numerofacture) {
     if (data[i][COL["numero de facture"]] === numerofacture) {
 
       const montantTTC = data[i][COL["montant"]];
-      const tauxTVA = 0.20; 
+      const tauxTVA = 0; 
       const montantHT = montantTTC / (1 + tauxTVA);
       const montantTVA = montantTTC - montantHT;
 
@@ -971,6 +1019,9 @@ function exportFactureJSON(numerofacture) {
         facture: {
           numero: data[i][COL["numero de facture"]],
           date: data[i][COL["date"]],
+          format: "Factur-X-ready",
+          devise: "EUR",
+          date_echeance: data[i][COL["date echeance"]],
         },
 
         emetteur: {
@@ -983,13 +1034,18 @@ function exportFactureJSON(numerofacture) {
           nom: data[i][COL["client"]],
           email: data[i][COL["adresse emails"]],
           adresse: data[i][COL["adresse client"]],
+          type: data[i][COL["type client"]],
+          siren: data[i][COL["siren client"]],
+          tva: data[i][COL["tva client"]],
+          pays: data[i][COL["pays client"]],
         },
 
         montant: {
           ht: montantHT.toFixed(2),
           tva: montantTVA.toFixed(2),
           ttc: montantTTC.toFixed(2),
-          taux_tva: tauxTVA
+          taux_tva: tauxTVA,
+          mention_tva: "TVA non applicable - article 293 B du CGI"
         },
 
         paiement: {
@@ -1015,12 +1071,19 @@ function telechargerJSON() {
   }
 
   const html = `
-    <a download="${numero}.json"
-       href="data:application/json;charset=utf-8,${encodeURIComponent(json)}">
-       Télécharger JSON
-    </a>
-    <script>document.querySelector('a').click();</script>
-  `;
+    <html>
+      <body>
+        <a download="${numero}.json"
+          href="data:application/json;charset=utf-8,${encodeURIComponent(json)}">
+          Télécharger JSON
+        </a>
+
+        <script>
+          document.querySelector('a').click();
+        </script>
+      </body>
+    </html>
+    `;
 
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutput(html),
