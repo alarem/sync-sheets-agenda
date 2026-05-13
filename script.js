@@ -26,6 +26,13 @@ const STATUS = {
   NON: "non"
 };
 
+const PAYMENT_CODES = {
+  "CB": "48",
+  "Virement": "58",
+  "Espèces": "10",
+  "Chèque": "20"
+};
+
 const CALENDAR_TAGS = {
   FACTURE: "Facture envoyee",
   SUIVI: "Suivi envoye"
@@ -60,6 +67,7 @@ const SHEET_LAYOUT = {
   ]
 };
 const TOTAL_COLUMNS = SHEET_LAYOUT.HEADERS.length;
+let COLUMN_CACHE = null;
 
 //fonction principale
 function importBusinessEvents() {
@@ -120,7 +128,7 @@ function importBusinessEvents() {
     // 🔹 8. Parcourir chaque événement
     events.forEach(event => {
       try {
-      const eventid = event.getId().toString().trim(); //récupères l’identifiant unique de l’événement,assure format texte, nettoie
+      const eventid = event.getId().split("@")[0].trim(); //récupères l’identifiant unique de l’événement,assure format texte, nettoie
       // 🔁 éviter doublons dans le script
       if (seenEvents.has(eventid)) return;
       seenEvents.add(eventid);
@@ -322,7 +330,7 @@ function importBusinessEvents() {
       // 🔹 SIRET prioritaire (14 chiffres)
       const matchSiret = rawDescription.match(/\b\d{14}\b/);
 
-      if (matchSiret) {
+      if (matchSiret && isValidSiret(matchSiret[0])) {
         siretClient = matchSiret[0];
         sirenClient = siretClient.substring(0, 9);
       } else {
@@ -337,7 +345,7 @@ function importBusinessEvents() {
 
       let tvaClient = "";
       const matchTVA = rawDescription.match(/\b(FR|BE|DE|IT|ES|LU|NL)[A-Z0-9]{2,12}\b/);
-      if (matchTVA) {
+      if (matchTVA && isValidTVA(matchTVA[0])) {
         tvaClient = matchTVA[0];
       }
 
@@ -403,7 +411,7 @@ function importBusinessEvents() {
     // 🔥 Mise à jour de lastRow
     //lastRow += rows.length;
     }
-
+    console.log("Événements importés : " + rows.length);
     console.log("Import terminé !");
 
     const now = Utilities.formatDate(
@@ -601,9 +609,15 @@ function envoyerFacture() {
     const sheetFacture = ss.getSheetByName(CONFIG.SHEET_FACTURE);
     const numerofacture = sheetFacture.getRange(CELLS.FACTURE_NUMERO).getValue();
     const emailRaw = sheetFacture.getRange(CELLS.FACTURE_EMAIL).getValue();
-    const email = emailRaw.split(",")[0].trim();
+    const email = safeString(emailRaw).split(",")[0].trim();
     const client = sheetFacture.getRange(CELLS.FACTURE_CLIENT).getValue();
+    const montant = Number(sheetFacture.getRange(CELLS.FACTURE_MONTANT).getValue()
+      );
 
+      if (montant <= 0) {
+        setStatus("❌ Montant invalide", true);
+        return;
+      }
     const sheetRDV = ss.getSheetByName(CONFIG.SHEET_RDV);
     const COL = getColumnMap(sheetRDV);
     const lastRow = sheetRDV.getLastRow();
@@ -1040,14 +1054,17 @@ function exportFactureJSON(numerofacture) {
       const facture = {
         facture: {
           type_document: "FACTURE",
+          type_transaction: "380",
           standard: "Factur-X",
           version: "1.0",
           uuid: Utilities.getUuid(),
           generated_at: new Date().toISOString(),          
           numero: data[i][COL["numero de facture"]],
           date: data[i][COL["date"]],
-          format: "Factur-X-ready",
+          profil: "MINIMUM",
           devise: "EUR",
+          format_electronique: "FACTUR-X",
+          canal_transmission: "PPF",
           date_echeance: data[i][COL["date echeance"]],
         },
 
@@ -1076,8 +1093,9 @@ function exportFactureJSON(numerofacture) {
           tva: montantTVA.toFixed(2),
           ttc: montantTTC.toFixed(2),
           taux_tva: tauxTVA,
-          code_tva: "E",
-          mention_tva: "TVA non applicable - article 293 B du CGI"
+          categorie_tva: "VATEX-EU-O",
+          mention_tva: "TVA non applicable - article 293 B du CGI",
+          exoneration_tva: "VATEX-FR-FRANCHISE"
         },        
         lignes: [
           {
@@ -1090,6 +1108,7 @@ function exportFactureJSON(numerofacture) {
         ],
         paiement: {
           mode: data[i][COL["mode paiement"]],
+          mode_paiement_code: PAYMENT_CODES[data[i][COL["mode paiement"]]] || "1",
           statut: data[i][6]
         }
       };
@@ -1102,7 +1121,7 @@ function exportFactureJSON(numerofacture) {
 }
 
 function telechargerJSON() {
-  const numero = getSheet(CONFIG.SHEET_CONFIG).getRange(CELLS.RDV_NUMERO_RECHERCHE).getValue();
+  const numero = getSheet(CONFIG.SHEET_CONFIG).getRange(CONFIG_CELLS.RDV_NUMERO_RECHERCHE).getValue();
   const json = exportFactureJSON(numero);
 
   if (!json) {
@@ -1219,4 +1238,37 @@ function sanitizeText(text) {
   return text
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
     .trim();
+}
+function isValidTVA(tva) {
+
+  tva = safeString(tva).replace(/\s/g, "").toUpperCase();
+
+  return /^[A-Z]{2}[A-Z0-9]{2,12}$/.test(tva);
+}
+function isValidSiret(siret) {
+
+  siret = safeString(siret).replace(/\s/g, "");
+
+  if (!/^\d{14}$/.test(siret)) {
+    return false;
+  }
+
+  let sum = 0;
+
+  for (let i = 0; i < 14; i++) {
+
+    let digit = parseInt(siret[i]);
+
+    if (i % 2 === 0) {
+      digit *= 2;
+
+      if (digit > 9) {
+        digit -= 9;
+      }
+    }
+
+    sum += digit;
+  }
+
+  return sum % 10 === 0;
 }
