@@ -349,7 +349,7 @@ function importBusinessEvents() {
         tvaClient = matchTVA[0];
       }
 
-      let paysClient = "FR";
+      let paysClient = detectCountry(rawDescription, adresse);
       let dateEcheance = "";
       const echeance = new Date(start);
       echeance.setDate(echeance.getDate() + 30);
@@ -790,7 +790,7 @@ function updateCalendarFromSheet() {
 
     if (!eventid) continue;
 
-    const event = CalendarApp.getEventById(eventid);
+    const event = CalendarApp.getEventById(eventid + "@google.com") || CalendarApp.getEventById(eventid);
     if (!event) continue;
 
     let desc = event.getDescription() || "";
@@ -1054,13 +1054,18 @@ function exportFactureJSON(numerofacture) {
       const facture = {
         facture: {
           type_document: "FACTURE",
+          type_facture: "INVOICE",
+          nature: "SERVICE",
+          schema_version: "2026-FR",
           type_transaction: "380",
           standard: "Factur-X",
+          profil_facturx: "MINIMUM",
           version: "1.0",
-          uuid: Utilities.getUuid(),
+          uuid: data[i][COL["numero de facture"]],
           generated_at: new Date().toISOString(),          
           numero: data[i][COL["numero de facture"]],
           date: data[i][COL["date"]],
+          date_prestation: data[i][COL["date"]],
           profil: "MINIMUM",
           devise: "EUR",
           format_electronique: "FACTUR-X",
@@ -1071,7 +1076,9 @@ function exportFactureJSON(numerofacture) {
         emetteur: {
           nom: "E.I SANDY ROYET",
           pays: "FR",
+          siren: "837870153",
           siret: "83787015300017", 
+          tva: "FR26837870153",
           adresse: "ONAE 80 imp. Thomas Alva Edisson 84120 Pertuis"
         },
 
@@ -1090,16 +1097,21 @@ function exportFactureJSON(numerofacture) {
 
         montant: {
           ht: montantHT.toFixed(2),
+          total_ht: montantHT.toFixed(2),
           tva: montantTVA.toFixed(2),
+          total_tva: montantTVA.toFixed(2),
           ttc: montantTTC.toFixed(2),
+          total_ttc: montantTTC.toFixed(2),
           taux_tva: tauxTVA,
-          categorie_tva: "VATEX-EU-O",
+          categorie_tva: "E",
           mention_tva: "TVA non applicable - article 293 B du CGI",
-          exoneration_tva: "VATEX-FR-FRANCHISE"
+          exoneration_tva: "TVA non applicable, art. 293 B du CGI"
         },        
         lignes: [
           {
             description: "Séance hypnose",
+            code_service: "9619Z",
+            categorie_service: "HYPNOSE",
             quantite: 1,
             prix_unitaire_ht: montantHT.toFixed(2),
             total_ht: montantHT.toFixed(2),
@@ -1109,7 +1121,12 @@ function exportFactureJSON(numerofacture) {
         paiement: {
           mode: data[i][COL["mode paiement"]],
           mode_paiement_code: PAYMENT_CODES[data[i][COL["mode paiement"]]] || "1",
-          statut: data[i][6]
+          statut_paiement: data[i][6] === "oui"
+          ? "PAID"
+          : "NOT_PAID",
+          date_paiement: data[i][6] === "oui"
+          ? data[i][COL["date"]]
+          : "",
         }
       };
 
@@ -1271,4 +1288,17 @@ function isValidSiret(siret) {
   }
 
   return sum % 10 === 0;
+}
+function detectCountry(description, adresse) {
+
+  const text = (description + " " + adresse).toLowerCase();
+
+  if (text.includes("belgique") || text.includes("belgium")) return "BE";
+  if (text.includes("allemagne") || text.includes("germany")) return "DE";
+  if (text.includes("italie") || text.includes("italy")) return "IT";
+  if (text.includes("espagne") || text.includes("spain")) return "ES";
+  if (text.includes("luxembourg")) return "LU";
+  if (text.includes("pays-bas") || text.includes("netherlands")) return "NL";
+
+  return "FR";
 }
