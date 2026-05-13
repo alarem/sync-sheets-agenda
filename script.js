@@ -362,7 +362,8 @@ function importBusinessEvents() {
 
       let numerofacture = "";
       // 🔍 chercher un numéro type HYP-2026-001
-      const matchFacture = rawDescription.match(/\b[A-Z]{2,5}[-_ ]?\d{4}[-_ ]?\d{1,4}\b/i);
+      //const matchFacture = rawDescription.match(/\b[A-Z]{2,5}[-_ ]?\d{4}[-_ ]?\d{1,4}\b/i);
+      const matchFacture = rawDescription.match(/\bHYP[-_ ]?\d{4}[-_ ]?\d{3}\b/i);
 
       if (matchFacture) {
         numerofacture = matchFacture[0].toUpperCase();
@@ -591,9 +592,61 @@ function genererPDF() {
     muteHttpExceptions: true,
     followRedirects: true
   }).getBlob().setName(numerofacture + ".pdf");
+  const xml = generateFacturXXML(numerofacture);
+
+  DriveApp.createFile(
+    Utilities.newBlob(
+      xml,
+      "application/xml",
+      "factur-x.xml"
+    )
+  );
 
   return blob;
 }
+function validateFactureData() {
+
+  const sheet = getSheet(CONFIG.SHEET_FACTURE);
+
+  const numero = safeString(
+    sheet.getRange(CELLS.FACTURE_NUMERO).getValue()
+  );
+
+  const client = safeString(
+    sheet.getRange(CELLS.FACTURE_CLIENT).getValue()
+  );
+
+  const email = safeString(
+    sheet.getRange(CELLS.FACTURE_EMAIL).getValue()
+  );
+
+  const montant = Number(
+    sheet.getRange(CELLS.FACTURE_MONTANT).getValue()
+  );
+
+  // 🔹 numéro obligatoire
+  if (!numero) {
+    throw new Error("Numero de facture manquant");
+  }
+
+  // 🔹 client obligatoire
+  if (!client) {
+    throw new Error("Nom client manquant");
+  }
+
+  // 🔹 montant valide
+  if (isNaN(montant) || montant <= 0) {
+    throw new Error("Montant invalide");
+  }
+
+  // 🔹 email valide
+  if (!isValidEmail(email)) {
+    throw new Error("Email invalide");
+  }
+
+  return true;
+}
+
 function envoyerFacture() {
     const lock = LockService.getScriptLock();
   try {
@@ -604,6 +657,7 @@ function envoyerFacture() {
     if (!factureOk) {
       return;
     }
+    validateFactureData();
     SpreadsheetApp.flush();
     const ss = getSS();
     const sheetFacture = ss.getSheetByName(CONFIG.SHEET_FACTURE);
@@ -790,7 +844,16 @@ function updateCalendarFromSheet() {
 
     if (!eventid) continue;
 
-    const event = CalendarApp.getEventById(eventid + "@google.com") || CalendarApp.getEventById(eventid);
+    let event = null;
+    try {
+      event = CalendarApp.getEventById(eventid);
+    } catch (e) {}
+
+    if (!event) {
+      try {
+        event = CalendarApp.getEventById(eventid + "@google.com");
+      } catch (e) {}
+    }
     if (!event) continue;
 
     let desc = event.getDescription() || "";
@@ -1135,6 +1198,79 @@ function exportFactureJSON(numerofacture) {
   }
 
   return null;
+}
+function generateFacturXXML(numerofacture) {
+
+  const json = JSON.parse(exportFactureJSON(numerofacture));
+
+  if (!json) {
+    throw new Error("Facture introuvable");
+  }
+
+  const facture = json.facture;
+  const client = json.client;
+  const emetteur = json.emetteur;
+  const montant = json.montant;
+
+  const dateFormatted = facture.date.replace(/-/g, "");
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+  <rsm:CrossIndustryInvoice
+  xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
+  xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100"
+  xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
+
+    <rsm:ExchangedDocumentContext>
+      <ram:GuidelineSpecifiedDocumentContextParameter>
+        <ram:ID>urn:factur-x.eu:1p0:minimum</ram:ID>
+      </ram:GuidelineSpecifiedDocumentContextParameter>
+    </rsm:ExchangedDocumentContext>
+
+    <rsm:ExchangedDocument>
+
+      <ram:ID>${facture.numero}</ram:ID>
+
+      <ram:TypeCode>380</ram:TypeCode>
+
+      <ram:IssueDateTime>
+        <udt:DateTimeString format="102">${dateFormatted}</udt:DateTimeString>
+      </ram:IssueDateTime>
+
+    </rsm:ExchangedDocument>
+
+    <rsm:SupplyChainTradeTransaction>
+
+      <ram:ApplicableHeaderTradeAgreement>
+
+        <ram:SellerTradeParty>
+          <ram:Name>${emetteur.nom}</ram:Name>
+        </ram:SellerTradeParty>
+
+        <ram:BuyerTradeParty>
+          <ram:Name>${client.nom}</ram:Name>
+        </ram:BuyerTradeParty>
+
+      </ram:ApplicableHeaderTradeAgreement>
+
+      <ram:ApplicableHeaderTradeSettlement>
+
+        <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
+
+        <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+
+          <ram:GrandTotalAmount>${montant.ttc}</ram:GrandTotalAmount>
+
+          <ram:DuePayableAmount>${montant.ttc}</ram:DuePayableAmount>
+
+        </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+
+      </ram:ApplicableHeaderTradeSettlement>
+
+    </rsm:SupplyChainTradeTransaction>
+
+  </rsm:CrossIndustryInvoice>`;
+
+  return xml;
 }
 
 function telechargerJSON() {
